@@ -34,7 +34,7 @@ if str(SRC) not in sys.path:
 from verifier import verify_pdf  # noqa: E402
 
 
-APP_NAME = "California Fruit Sorting Quality Verifier"
+APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
 APP_VERSION = "2026-05-19-openai-gpt55"
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
 UPLOAD_DIR = DATA_DIR / "uploads"

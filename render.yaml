@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: california-fruit-sq-verifier
+    name: california-fruit-openai-verifier
     env: docker
     plan: free
     dockerfilePath: ./Dockerfile

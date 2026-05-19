@@ -1,4 +1,4 @@
-# California Fruit Sorting Quality Verifier
+# California Fruit OpenAI Sorting Quality Verifier
 
 Render-ready web app for uploading sorting-quality packet PDFs and generating:
 
