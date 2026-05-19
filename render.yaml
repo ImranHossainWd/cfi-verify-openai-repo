@@ -2,7 +2,7 @@ services:
   - type: web
     name: california-fruit-openai-verifier
     env: docker
-    plan: free
+    plan: standard
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /healthz
