@@ -318,6 +318,7 @@ async def healthz() -> Dict[str, str]:
 
 @app.get("/diagnostics")
 async def diagnostics() -> Dict[str, Any]:
+    css_path = ROOT / "app" / "static" / "app.css"
     return {
         "status": "ok",
         "app_version": APP_VERSION,
@@ -328,6 +329,8 @@ async def diagnostics() -> Dict[str, Any]:
         "openai_key_present": bool(os.environ.get("OPENAI_API_KEY")),
         "tesseract_path": shutil.which("tesseract"),
         "pdftoppm_path": shutil.which("pdftoppm"),
+        "css_exists": css_path.exists(),
+        "css_size": css_path.stat().st_size if css_path.exists() else 0,
         "data_dir": str(DATA_DIR),
         "config_dir": str(CONFIG_DIR),
     }

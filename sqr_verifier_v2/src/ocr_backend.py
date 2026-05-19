@@ -232,6 +232,29 @@ class OpenAIVisionBackend:
                     chunks.append(str(content["text"]))
         return "\n".join(chunks).strip()
 
+    @staticmethod
+    def _parse_json_or_fallback(text: str) -> Dict[str, Any]:
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            i = text.find("{")
+            j = text.rfind("}")
+            if i >= 0 and j > i:
+                snippet = text[i:j+1]
+                try:
+                    return json.loads(snippet)
+                except json.JSONDecodeError:
+                    pass
+        return {
+            "raw_text": text,
+            "form_type_guess": "unknown",
+            "all_fields": {
+                "openai_raw_response": text,
+                "openai_parse_warning": "OpenAI returned text that was not valid JSON.",
+            },
+            "notes": "OpenAI returned non-JSON or malformed JSON; kept raw response for review.",
+        }
+
     def extract(self, image_path: str) -> Dict[str, Any]:
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY not set.")
@@ -243,7 +266,10 @@ class OpenAIVisionBackend:
             "input": [{
                     "role": "user",
                     "content": [
-                        {"type": "input_text", "text": VISION_PROMPT},
+                        {
+                            "type": "input_text",
+                            "text": VISION_PROMPT + "\n\nReturn only valid JSON. Do not use markdown.",
+                        },
                         {"type": "input_image", "image_url": image_url},
                     ],
             }],
@@ -251,11 +277,7 @@ class OpenAIVisionBackend:
             "max_output_tokens": 4096,
         })
         text = self._extract_text(resp) or json.dumps(resp)
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            i = text.find("{"); j = text.rfind("}")
-            data = json.loads(text[i:j+1]) if i >= 0 and j > i else {"raw_text": text}
+        data = self._parse_json_or_fallback(text)
         data["raw_text"] = data.get("raw_text", text)
         data["backend"] = self.name
         data["confidence_estimate"] = 0.95
