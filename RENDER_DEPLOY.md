@@ -18,7 +18,7 @@ Set these in Render:
 ```text
 VISION_PROVIDER=openai
 OPENAI_API_KEY=your_api_key
-OPENAI_MODEL=gpt-5.5
+OPENAI_MODEL=gpt-5.4-mini
 OPENAI_REASONING_EFFORT=none
 SQR_DATA_DIR=/tmp/sqr-verifier
 MAX_UPLOAD_MB=150

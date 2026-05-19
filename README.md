@@ -20,6 +20,6 @@ OPENAI_API_KEY=your_openai_api_key
 
 The free tier is configured in `render.yaml`. Uploaded/generated files are stored in `/tmp/sqr-verifier`, which is temporary on Render free tier.
 
-The default OpenAI vision model is `gpt-5.5`. Tesseract reads printed pages first; GPT-5.5 is used only for pages that need vision OCR.
+The default OpenAI vision model is `gpt-5.4-mini`. Tesseract reads printed pages first; GPT-5.4 Mini is used only for pages that need vision OCR.
 
 See `RENDER_DEPLOY.md` for more details.

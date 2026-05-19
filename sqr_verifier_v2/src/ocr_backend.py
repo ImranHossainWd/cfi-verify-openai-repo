@@ -199,7 +199,7 @@ class OpenAIVisionBackend:
     """
     name = "openai_vision"
 
-    def __init__(self, model: str = "gpt-5.5", api_key: Optional[str] = None):
+    def __init__(self, model: str = "gpt-5.4-mini", api_key: Optional[str] = None):
         self.model = os.environ.get("OPENAI_MODEL", model)
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
 

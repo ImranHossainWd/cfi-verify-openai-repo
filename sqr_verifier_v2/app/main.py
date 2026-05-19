@@ -44,7 +44,7 @@ CONFIG_DIR = Path(os.environ.get("SQR_CONFIG_DIR", ROOT / "config")).resolve()
 VISION_CACHE = Path(os.environ.get("VISION_CACHE_PATH", ROOT / "cache" / "vision_cache.json")).resolve()
 DEFAULT_VISION_PROVIDER = os.environ.get("VISION_PROVIDER", "openai").strip().lower() or "openai"
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.5")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.4-mini")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "150"))
 PROVIDERS = ["openai", "anthropic", "mock"]
 

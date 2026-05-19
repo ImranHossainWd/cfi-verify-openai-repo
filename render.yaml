@@ -10,7 +10,7 @@ services:
       - key: VISION_PROVIDER
         value: openai
       - key: OPENAI_MODEL
-        value: gpt-5.5
+        value: gpt-5.4-mini
       - key: OPENAI_REASONING_EFFORT
         value: none
       - key: MAX_UPLOAD_MB
