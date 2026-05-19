@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="detail">
+  <a class="back" href="/">Back to packets</a>
+  <div class="title-row">
+    <div>
+      <p class="eyebrow">Packet {{ job.id }}</p>
+      <h1>{{ job.packet_name }}</h1>
+      <p>{{ job.original_filename }} · OCR provider: {{ job.vision_provider }}</p>
+    </div>
+    <span id="status" class="status {{ job.status }}">{{ job.status }}</span>
+  </div>
+</section>
+
+<section class="grid">
+  <article class="panel">
+    <div class="panel-head">
+      <h2>Verification</h2>
+      <span id="message">{{ job.message }}</span>
+    </div>
+    {% if job.summary %}
+      <div class="metrics">
+        <div><strong>{{ job.summary.overall }}</strong><small>Overall</small></div>
+        <div><strong>{{ job.summary.pass_count }}</strong><small>Pass</small></div>
+        <div><strong>{{ job.summary.fail_count }}</strong><small>Flags</small></div>
+        <div><strong>{{ job.summary.info_count }}</strong><small>Notes</small></div>
+      </div>
+      {% if job.summary.warnings %}
+        <h3>OCR warnings</h3>
+        <div class="flags">
+        {% for warning in job.summary.warnings %}
+          <div class="flag">
+            <strong>Partial OCR report</strong>
+            <span>{{ warning }}</span>
+          </div>
+        {% endfor %}
+        </div>
+      {% endif %}
+      <h3>Sub-packets</h3>
+      <div class="subpackets">
+      {% for sp in job.summary.sub_packets %}
+        <div class="subpacket">
+          <strong>#{{ sp.index }} · WO {{ sp.wo or "unknown" }}</strong>
+          <span>{{ sp.customer or "Unknown customer" }} · {{ sp.product or "Unknown product" }}</span>
+          <small>PO {{ sp.po or "unknown" }} · {{ sp.cases or "?" }} cases · {{ sp.total_lbs or "?" }} lbs</small>
+        </div>
+      {% endfor %}
+      </div>
+      {% if job.summary.failures %}
+        <h3>Flags</h3>
+        <div class="flags">
+        {% for flag in job.summary.failures %}
+          <div class="flag">
+            <strong>{{ flag.name }}</strong>
+            <span>{{ flag.detail }}</span>
+            {% if flag.pages %}<small>Pages: {{ flag.pages|join(", ") }}</small>{% endif %}
+          </div>
+        {% endfor %}
+        </div>
+      {% endif %}
+    {% else %}
+      <p class="empty">This job is {{ job.status }}. The page will refresh while it runs.</p>
+    {% endif %}
+  </article>
+
+  <aside class="panel">
+    <div class="panel-head">
+      <h2>Downloads</h2>
+    </div>
+    <div id="downloads" class="downloads">
+      {% for file in files %}
+        <a href="{{ file.url }}">{{ file.label }}<small>{{ file.filename }}</small></a>
+      {% endfor %}
+      {% if not files %}<p class="empty">Files appear here when the run completes.</p>{% endif %}
+    </div>
+    <form action="/jobs/{{ job.id }}/rerun" method="post">
+      <button type="submit" class="secondary">Re-run packet</button>
+    </form>
+  </aside>
+</section>
+
+{% if job.status in ["queued", "running"] %}
+<script>
+const jobId = "{{ job.id }}";
+async function refreshJob() {
+  const res = await fetch(`/api/jobs/${jobId}`);
+  const job = await res.json();
+  document.getElementById("status").textContent = job.status;
+  document.getElementById("status").className = `status ${job.status}`;
+  document.getElementById("message").textContent = job.message || "";
+  if (job.status === "complete" || job.status === "failed") window.location.reload();
+}
+setInterval(refreshJob, 3000);
+</script>
+{% endif %}
+{% endblock %}

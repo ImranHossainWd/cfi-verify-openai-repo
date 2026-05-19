@@ -1,0 +1,72 @@
+# California Fruit Inc — Customer Registry
+# Each entry maps a customer's name (as it appears on documents, in any form)
+# to a canonical name + customer-specific behavior flags.
+#
+# To add a new customer: copy a block, edit the aliases and canonical name,
+# adjust the flags. No code changes required.
+
+customers:
+  - canonical: "Olive Nation"
+    aliases:
+      - "Olive Nation"
+      - "OliveNation"
+      - "Olive Nation LLC"
+    customer_code: "BPC-000130"
+    co_packer_route: false       # Has direct shipment (BOL + Trailer/Cargo required)
+    requires_bol: true
+    requires_trailer_inspection: true
+    notes: "Direct ship via FedEx parcel."
+
+  - canonical: "Mark Keshishian & Sons"
+    aliases:
+      - "Mark Keshishian"
+      - "Mark Keshishian & Sons"
+      - "Keshishian"
+    customer_code: ""             # fill in if known
+    co_packer_route: false
+    requires_bol: true
+    requires_trailer_inspection: true
+    notes: ""
+
+  - canonical: "Balcorp Limited"
+    aliases:
+      - "Balcorp Limited"
+      - "Balcorp"
+    customer_code: ""
+    co_packer_route: false
+    requires_bol: true
+    requires_trailer_inspection: true
+    notes: ""
+
+  - canonical: "Pedrick Produce"
+    aliases:
+      - "Pedrick Produce"
+      - "Pedrick"
+    customer_code: "BPC-000172"
+    co_packer_route: false
+    requires_bol: true
+    requires_trailer_inspection: true
+    notes: "Multi-WO orders typical (4 product WOs sharing one PO/order). Verbal POs (e.g. 'Verbal/Aaron MM/DD/YY'). Pickup via McElwany Trucking. Bill-to and ship-to addresses differ (Stratford Ave vs Sievers Rd, both Dixon CA)."
+
+  - canonical: "Trader Joe's"
+    aliases:
+      - "Trader Joe's"
+      - "Trader Joe"
+      - "Trader Joes"
+    customer_code: ""
+    co_packer_route: true         # Ships to co-packer, no BOL or Trailer/Cargo
+    requires_bol: false
+    requires_trailer_inspection: false
+    notes: "Co-packer route — verify SQR + co-packer documentation only."
+
+  # Backup customer (appears as a SOURCE for extra-case orders, not the buyer)
+  - canonical: "CraftMark Bakery"
+    aliases:
+      - "CraftMark Bakery"
+      - "CraftMark"
+    customer_code: ""
+    co_packer_route: false
+    requires_bol: true
+    requires_trailer_inspection: true
+    is_backup_source_only: true   # If detected, treat as backup-source not primary
+    notes: "Often appears as the original-run source for extra-case orders."

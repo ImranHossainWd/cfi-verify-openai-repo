@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <img src="/static/logo.svg" alt="" class="logo">
+      <span>
+        <strong>California Fruit</strong>
+        <small>Sorting Quality Verifier</small>
+      </span>
+    </a>
+    <nav>
+      <a href="/">Packets</a>
+      <a href="/healthz">Health</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

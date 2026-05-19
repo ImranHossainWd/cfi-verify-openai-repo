@@ -1,0 +1,120 @@
+# California Fruit Inc — Per-Customer Product Specs
+#
+# Each entry: customer + product → acceptable ranges for measurable parameters.
+# AI uses these to validate that the values on the COA, Pretest, and SQR are
+# inside the customer's spec band, not just internally consistent.
+#
+# The Olive Nation entry is bootstrapped from the COA on packet INV004493 p4
+# which prints the spec ranges directly on the form. Other entries should be
+# filled in by the QC team (template provided).
+#
+# To add a customer-product spec: copy a block, fill in the ranges.
+# Use null for parameters that don't apply to that product.
+
+specs:
+  - customer: "Olive Nation"
+    product: "Single Diced Peaches"
+    moisture_pct:
+      min: 22.0
+      max: 26.0
+      marginal_tolerance: 0.5      # ± allowed before flag
+    sulfur_ppm:
+      min: 1500
+      max: 3800
+    aflatoxin_ppb_max: null
+    total_defect_pct_max: 10.0
+    moisture_typical: 23.0          # Mid-band reference
+    sulfur_typical: 2560
+
+  # ---- TEMPLATES — fill in once specs are received from QC ----
+  - customer: "Mark Keshishian & Sons"
+    product: "(any)"
+    moisture_pct:
+      min: null
+      max: null
+      marginal_tolerance: 0.5
+    sulfur_ppm:
+      min: null
+      max: null
+    aflatoxin_ppb_max: null
+    total_defect_pct_max: 10.0
+
+  - customer: "Balcorp Limited"
+    product: "Jumbo Peaches"
+    moisture_pct:
+      min: null
+      max: null
+      marginal_tolerance: 0.5
+    sulfur_ppm:
+      min: null
+      max: null
+    aflatoxin_ppb_max: null
+    total_defect_pct_max: 10.0
+
+  - customer: "Trader Joe's"
+    product: "Apricot Slabs"
+    moisture_pct: { min: null, max: null, marginal_tolerance: 0.5 }
+    sulfur_ppm: { min: null, max: null }
+    aflatoxin_ppb_max: null
+    total_defect_pct_max: 10.0
+
+  - customer: "Trader Joe's"
+    product: "Extra Choice Pears"
+    moisture_pct: { min: null, max: null, marginal_tolerance: 0.5 }
+    sulfur_ppm: { min: null, max: null }
+    aflatoxin_ppb_max: null
+    total_defect_pct_max: 10.0
+
+  # ---- Pedrick Produce — extracted from their COA ranges on packet INV004584 ----
+  - customer: "Pedrick Produce"
+    product: "Extra Ripe Apricots"
+    moisture_pct:
+      min: 26.0
+      max: 28.0
+      marginal_tolerance: 0.5
+    sulfur_ppm:
+      min: 1500
+      max: 3500
+    aflatoxin_ppb_max: null
+    total_defect_pct_max: 10.0
+
+  - customer: "Pedrick Produce"
+    product: "Extra Fancy Nectarines"
+    moisture_pct: { min: 26.0, max: 30.0, marginal_tolerance: 0.5 }
+    sulfur_ppm:   { min: 1500, max: 3000 }
+    aflatoxin_ppb_max: null
+    total_defect_pct_max: 10.0
+
+  - customer: "Pedrick Produce"
+    product: "Extra Fancy Peaches"
+    moisture_pct: { min: 26.0, max: 30.0, marginal_tolerance: 0.5 }
+    sulfur_ppm:   { min: 1500, max: 3500 }
+    aflatoxin_ppb_max: null
+    total_defect_pct_max: 10.0
+
+  - customer: "Pedrick Produce"
+    product: "Extra Choice Pears"
+    moisture_pct: { min: 26.0, max: 30.0, marginal_tolerance: 0.5 }
+    sulfur_ppm:   { min: 1500, max: 3500 }
+    aflatoxin_ppb_max: null
+    total_defect_pct_max: 10.0
+
+
+# Product code → display-name mapping
+# When a Sage product code shows up (e.g. "PEACHES-DICED-SINGLE"), map it here
+# so the customer-product pair can be looked up in the specs table.
+product_aliases:
+  "PEACHES-DICED-SINGLE":  "Single Diced Peaches"
+  "PEACHES-DICED-DOUBLE":  "Double Diced Peaches"
+  "PEACHES-RAW-66":        "Peaches Raw 66"
+  "PEACHES-RAW-84":        "Peaches Raw 84"
+  "PEACHES-RAW-JUMBO":     "Jumbo Peaches"
+  "PEACHES-RAW-XJUMBO":    "Jumbo Peaches"
+  # Pedrick product codes
+  "COTS-EXTRA-RIPE":       "Extra Ripe Apricots"
+  "GOTS-EXTRA-RIPE":       "Extra Ripe Apricots"           # OCR alias
+  "APRICOTS-SLAB":         "Apricot Slabs"
+  "NECTS-EXTRA-FANCY":     "Extra Fancy Nectarines"
+  "PEACHES-EXTRA-FANCY":   "Extra Fancy Peaches"
+  "PEAR-X-CHOICE":         "Extra Choice Pears"
+  "PEARS-EXTRA-CHOICE":    "Extra Choice Pears"

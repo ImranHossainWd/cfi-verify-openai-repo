@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">AI verification workspace</p>
+    <h1>Upload a sorting-quality packet and receive the marked review package.</h1>
+  </div>
+  <form class="upload" action="/jobs" method="post" enctype="multipart/form-data">
+    <label>
+      Packet PDF
+      <input type="file" name="pdf" accept="application/pdf" required>
+    </label>
+    <label>
+      Packet name
+      <input type="text" name="packet_name" placeholder="Olive Nation WO 11392">
+    </label>
+    <label>
+      Vision OCR
+      <select name="vision_provider">
+        {% for provider in providers %}
+          <option value="{{ provider }}" {% if provider == default_provider %}selected{% endif %}>{{ provider }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Run Verification</button>
+    <p class="hint">Max upload: {{ max_upload_mb }} MB. Use mock for cached demos; use Anthropic/OpenAI for production handwriting OCR.</p>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Recent packets</h2>
+    <span>{{ jobs|length }} total</span>
+  </div>
+  {% if jobs %}
+    <div class="job-list">
+      {% for job in jobs %}
+      <a class="job-row" href="/jobs/{{ job.id }}">
+        <span class="status {{ job.status }}">{{ job.status }}</span>
+        <span class="job-main">
+          <strong>{{ job.packet_name }}</strong>
+          <small>{{ job.original_filename }} · {{ job.created_at }}</small>
+        </span>
+        {% if job.summary %}
+          <span class="score {{ job.summary.overall|lower }}">{{ job.summary.overall }}</span>
+          <span class="counts">{{ job.summary.pass_count }} pass · {{ job.summary.fail_count }} flags · {{ job.summary.info_count }} notes</span>
+        {% else %}
+          <span class="counts">{{ job.message }}</span>
+        {% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="empty">No packets uploaded yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

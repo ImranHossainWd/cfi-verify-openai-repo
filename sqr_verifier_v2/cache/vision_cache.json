@@ -1,0 +1,2544 @@
+{
+  "_README": "Vision-OCR cache. In production this is populated automatically by Anthropic Claude Haiku API calls (~$0.003/page). Each entry is the structured output of the VISION_PROMPT in ocr_backend.py. Cache is keyed by '<packet>_<filename>' or '<filename>'.",
+  "olive_p-09.png": {
+    "form_type_guess": "sqr_checkoff",
+    "form_title_text": "CALIFORNIA FRUIT INC. SORTING QUALITY REPORT CHECKOFF LIST",
+    "wo_numbers": [
+      "11392"
+    ],
+    "po_numbers": [
+      "15520"
+    ],
+    "invoice_number": null,
+    "bol_number": null,
+    "customer_name": "Olive Nation",
+    "product_description": "Single Diced Peaches",
+    "product_code": null,
+    "dates": [
+      {
+        "label": "2nd Verification",
+        "value": "01/28/2026"
+      }
+    ],
+    "quantities": [],
+    "moisture_pct": null,
+    "sulfur_ppm": null,
+    "crop_year": null,
+    "initials_present": [
+      {
+        "location": "Verification (Production Control)",
+        "value": "JM"
+      },
+      {
+        "location": "2nd Verification (Office Administration)",
+        "value": "VM"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "1. COVER SHEET",
+        "checked": true
+      },
+      {
+        "item": "2. QUALITY CONTROL FORMS",
+        "checked": true
+      },
+      {
+        "item": "3. CASE METAL DETECTOR FORM",
+        "checked": false,
+        "note": "marked NA"
+      },
+      {
+        "item": "4. PRODUCT USED",
+        "checked": true
+      },
+      {
+        "item": "5. DOCUMENTATION FORMS",
+        "checked": true
+      },
+      {
+        "item": "6. LOOSE METAL DETECTOR FINDINGS",
+        "checked": false,
+        "note": "NO FINDINGS"
+      },
+      {
+        "item": "7. CASE METAL DETECTOR FINDINGS",
+        "checked": false,
+        "note": "NO FINDINGS"
+      },
+      {
+        "item": "8. SCANNED (INC, FRONT OFFICE)",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "metal_detector_findings": "NO FINDINGS",
+    "handwritten_corrections": [],
+    "notes": "All 8 checkboxes accounted for; both Verification + 2nd Verification signatures present and dated."
+  },
+  "olive_p-10.png": {
+    "form_type_guess": "sqr_extra_case",
+    "form_title_text": "EXTRA CASE - SORTING QUALITY REPORT",
+    "wo_numbers": [
+      "11392"
+    ],
+    "po_numbers": [
+      "15520"
+    ],
+    "customer_name": "Olive Nation",
+    "product_description": "Single Diced Peaches",
+    "dates": [
+      {
+        "label": "Date Inspected",
+        "value": "01/27/2026"
+      },
+      {
+        "label": "Start",
+        "value": "9:05"
+      },
+      {
+        "label": "End",
+        "value": "9:10"
+      },
+      {
+        "label": "Original Production Date",
+        "value": "12/22/2025"
+      },
+      {
+        "label": "Verification",
+        "value": "01/28/2026"
+      },
+      {
+        "label": "2nd Verification",
+        "value": "01/28/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "TOTAL: 1 Case @ 25 lbs",
+        "cases": 1,
+        "lbs_per_case": 25,
+        "total_lbs": 25,
+        "pallet": "Pallet 1"
+      }
+    ],
+    "moisture_pct": 23.0,
+    "sulfur_ppm": 2560,
+    "crop_year": "2025",
+    "original_crop_years": "2022-2024",
+    "original_line": "L-2",
+    "initials_present": [
+      {
+        "location": "QC",
+        "value": "JS"
+      },
+      {
+        "location": "Verification",
+        "value": "AA"
+      },
+      {
+        "location": "2nd Verification",
+        "value": "VM"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "NO New WO#",
+        "checked": true
+      }
+    ],
+    "case_metal_detector_verification": {
+      "status": "blank \u2014 no entries needed for this packet"
+    },
+    "is_defect_bag_photo": false,
+    "handwritten_corrections": [
+      {
+        "crossed_out": "11342",
+        "replaced_with": "11392",
+        "initialed": true,
+        "field": "Original WO#",
+        "note": "Corrected from 11342 to 11392 in red, initialed adjacent"
+      }
+    ],
+    "notes": "Cleo cross-checks: Moisture 23.0 \u2194 COA, Sulfur 2560 \u2194 COA, Crop Year (For COA) 2025 \u2194 COA, Original Crop Years 2022-2024 (source bins), Original Line L-2, Total 1cs@25lbs \u2194 FPP. Verification + 2nd Verification both signed and dated 1/28/26."
+  },
+  "olive_p-12.png": {
+    "form_type_guess": "extra_cases_used",
+    "form_title_text": "EXTRA CASES USED FROM COLD STORAGE",
+    "wo_numbers": [
+      "11392"
+    ],
+    "po_numbers": [
+      "15520"
+    ],
+    "customer_name": "Olive Nation",
+    "product_description": "Single Diced Peaches",
+    "dates": [
+      {
+        "label": "Date",
+        "value": "01/27/2026"
+      },
+      {
+        "label": "Original Pack Date",
+        "value": "12/22/2025"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "1 case @ 25 lb from WO 11392",
+        "cases": 1,
+        "lbs_per_case": 25,
+        "total_lbs": 25
+      }
+    ],
+    "moisture_pct": null,
+    "sulfur_ppm": null,
+    "crop_year": null,
+    "initials_present": [
+      {
+        "location": "DOC",
+        "value": "JM"
+      },
+      {
+        "location": "QC",
+        "value": "JS"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "NO NEW WO#",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "handwritten_corrections": [],
+    "notes": ""
+  },
+  "olive_p-13.png": {
+    "form_type_guess": "stamp_log",
+    "form_title_text": "STAMP LOG",
+    "wo_numbers": [
+      "11392"
+    ],
+    "po_numbers": [],
+    "customer_name": "Olive Nation",
+    "product_description": "Single Diced Peaches",
+    "product_code": "PEACHES-DICED-SINGLE",
+    "dates": [
+      {
+        "label": "Date",
+        "value": "01/27/2026"
+      },
+      {
+        "label": "Packed date (label)",
+        "value": "12/22/2025"
+      },
+      {
+        "label": "Start Up Time",
+        "value": "9:05"
+      },
+      {
+        "label": "End Of Shift Time",
+        "value": "9:10"
+      }
+    ],
+    "quantities": [],
+    "initials_present": [
+      {
+        "location": "Start Up Documentation",
+        "value": "JM"
+      },
+      {
+        "location": "Start Up QC",
+        "value": "JS"
+      },
+      {
+        "location": "End Of Shift Documentation",
+        "value": "JM"
+      },
+      {
+        "location": "End Of Shift QC",
+        "value": "JS"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "USED Extra Cases YES",
+        "checked": true
+      },
+      {
+        "item": "Tumbler Line",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Lot # 11392. Single-shift extra-case run; First Break/Lunch/Second Break intentionally blank."
+  },
+  "olive_p-04.png": {
+    "form_type_guess": "coa",
+    "form_title_text": "CERTIFICATE OF ANALYSIS",
+    "wo_numbers": [
+      "11392"
+    ],
+    "po_numbers": [
+      "15520"
+    ],
+    "customer_name": "Olive Nation",
+    "product_description": "Single Diced Peaches",
+    "product_code": "PEACHES-DICED-SINGLE",
+    "dates": [
+      {
+        "label": "Shipped Date",
+        "value": "01/29/2026"
+      },
+      {
+        "label": "Production Date",
+        "value": "12/22/2025"
+      },
+      {
+        "label": "Date Inspected",
+        "value": "01/27/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "1 Case @ 25 lbs",
+        "cases": 1,
+        "lbs_per_case": 25,
+        "total_lbs": 25
+      }
+    ],
+    "moisture_pct": 23.0,
+    "moisture_range": [
+      22.0,
+      26.0
+    ],
+    "sulfur_ppm": 2560,
+    "sulfur_range": [
+      1500,
+      3800
+    ],
+    "crop_year": "2025",
+    "total_defect_pct": 1.5,
+    "total_defect_pct_max": 10.0,
+    "packaging_style": "2 Mil Poly Bags",
+    "packaging_count": "Total of 1 Case @ 25 lbs",
+    "labeling": "Single Diced Peaches Net Wt. 25 lbs",
+    "initials_present": [
+      {
+        "location": "Prepared by",
+        "value": "JS"
+      },
+      {
+        "location": "Verified by",
+        "value": "JM"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Total defects 1.50% (well under 10% spec). Defect breakdown by sample is detailed."
+  },
+  "olive_p-05.png": {
+    "form_type_guess": "fpp",
+    "form_title_text": "Final Packed Product Sheet",
+    "wo_numbers": [
+      "11392"
+    ],
+    "po_numbers": [
+      "15520"
+    ],
+    "customer_name": "Olive Nation",
+    "product_description": "Single Diced Peaches",
+    "dates": [
+      {
+        "label": "Date Order Completed",
+        "value": "01/27/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "Total of 1 Case @ 25 lbs",
+        "cases": 1,
+        "lbs_per_case": 25,
+        "total_lbs": 25
+      }
+    ],
+    "initials_present": [
+      {
+        "location": "Completed By",
+        "value": "Jennifer Galindo"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Final packed product sheet. Single line item, 1 case."
+  },
+  "olive_p-06.png": {
+    "form_type_guess": "bol",
+    "form_title_text": "BILL OF LADING",
+    "wo_numbers": [
+      "11392"
+    ],
+    "po_numbers": [
+      "15520"
+    ],
+    "bol_number": "BOL002695",
+    "customer_name": "Olive Nation",
+    "product_description": "Single Diced Peaches",
+    "dates": [
+      {
+        "label": "BOL Date",
+        "value": "01/29/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "1 case, 27 lb gross",
+        "cases": 1,
+        "total_lbs": 27
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "BOL #002695. FedEx Ground. 27 lb gross with packaging (vs 25 lb net product)."
+  },
+  "olive_p-11.png": {
+    "form_type_guess": "sqr_full",
+    "form_title_text": "SORTING QUALITY REPORT",
+    "wo_numbers": [
+      "11392"
+    ],
+    "po_numbers": [
+      "92484"
+    ],
+    "invoice_number": null,
+    "bol_number": null,
+    "customer_name": "CraftMark Bakery",
+    "product_description": "Double Diced Peaches",
+    "product_code": null,
+    "dates": [
+      {
+        "label": "Run 1 Date / Start / End",
+        "value": "12/19/2025 06:30 - 06:40 (Line 2 Resorting)"
+      },
+      {
+        "label": "Run 2 Date / Start / End",
+        "value": "12/19/2025 08:35 - 01:55 (Line 2 Resorting)"
+      },
+      {
+        "label": "Run 3 Date / Start / End",
+        "value": "12/22/2025 06:05 - 09:55 (Line 2 Dicing)"
+      },
+      {
+        "label": "Verification Date",
+        "value": "12/23/2025"
+      }
+    ],
+    "quantities": [],
+    "moisture_pct": 24.5,
+    "sulfur_ppm": 2240,
+    "crop_year": "2024",
+    "original_crop_years": "2022-2024",
+    "original_line": "L-2",
+    "total_defect_pct": 0.38,
+    "total_defect_pct_max": 10.0,
+    "initials_present": [
+      {
+        "location": "VERIFICATION",
+        "value": "AA"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "Custom Loose Metal Detector \u2014 Sensitivities (1.5mm, 1.5mm, 2.0mm)",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "metal_detector_findings": null,
+    "handwritten_corrections": [],
+    "highlighted_regions": [
+      {
+        "region": "Sample Group 5 column (entire vertical strip)",
+        "marker_color": "green",
+        "values": [
+          "Bin 1: Single Diced Peaches",
+          "Moisture 23.0",
+          "Sulfur 2560 ppm",
+          "Tap reading 23.0/23.0",
+          "Sample column total 1.50%"
+        ],
+        "interpretation": "Cleo highlighted column 5 in green \u2014 this column is the order-specific re-test data for Olive Nation's WO# 11392 (overlaid on the original CraftMark run). 23.0% moisture and 2560 ppm sulfur in this column MATCH Olive's COA p4 values."
+      }
+    ],
+    "all_fields": {
+      "Number of Samples (header)": "3",
+      "Sample group 1 \u2014 Time Completed": "07:35",
+      "Sample group 2 \u2014 Time Completed": "(blank)",
+      "Sample group 3 \u2014 Time Completed": "09:25",
+      "Sample group 5 \u2014 Time Completed (highlighted)": "08:30",
+      "Defects table \u2014 Slabs": [
+        "0.005 / 0.025% etc per sample group"
+      ],
+      "Defects table \u2014 Immature": "(values per sample group)",
+      "Defects table \u2014 Discolored/Black": "0.005, 0.025, 0.025, ...",
+      "Defects table \u2014 Sunburn": "0.025 (col 1), ...",
+      "Defects table \u2014 Scar/Hail Marks": "0.005, 0.010, ...",
+      "Defects table \u2014 Pit/Pit Fragments": "0.005, 0.010, ...",
+      "Defects table \u2014 Mold": "0.005",
+      "Defects table \u2014 Insect Damage / Insect": "(per group)",
+      "Defects table \u2014 Imbedded Dirt": "0.005, 0.005, 0.005, 0.005, 0.005",
+      "Defects table \u2014 Foreign Material": "0.010, 0.010, 0.005",
+      "Defects table \u2014 Off Size": "0.005, 0.050, 0.060, 0.105",
+      "% Totals per sample group": [
+        "0.40%",
+        "0.35%",
+        "0.00%",
+        "0.00%",
+        "1.50%",
+        "0.00%",
+        "0.00%",
+        "0.75%"
+      ],
+      "AVG % (overall defect average)": "0.38%",
+      "Used X-C / X-C row": "X-C",
+      "Line #": "2",
+      "Pallet/Bin # (col 1)": "Pallet 1",
+      "Pallet/Bin # (col 2)": "Pallet 2",
+      "Pallet/Bin # (col 5 highlighted)": "Bin 1",
+      "Bin 1 product (col 5 highlighted)": "Single Diced Peaches",
+      "Moisture reading row (col 1)": "24.5",
+      "Moisture reading row (col 2)": "24.5",
+      "Moisture reading row (col 5 highlighted)": "23.0",
+      "Moisture row Totals": "49",
+      "Tap reading sub-row (col 1)": "60 / 1 / 61.0 / 62",
+      "Tap reading sub-row (col 2)": "64.0 / 64",
+      "Tap reading sub-row (col 5 highlighted)": "23.0 / 23.0",
+      "Sulphur reading (col 1)": "2240 ppm",
+      "Sulphur reading (col 2)": "2240 ppm",
+      "Sulphur reading (col 5 highlighted)": "2560 ppm",
+      "Sulphur reading Totals": "4460 ppm",
+      "MOISTURE AVERAGE (CraftMark original)": "24.5",
+      "SO2 AVERAGE (CraftMark original)": "2240",
+      "Seal #": "9343553",
+      "VERIFICATION initials + date": "AA / 12/23/25"
+    },
+    "notes": "PAGE HAS DUAL-PURPOSE DATA. The page itself is the original CraftMark Bakery SQR for the run that produced the bins now used for Olive's extra-case order. Cleo's GREEN highlight on column 5 marks the Olive-specific re-test column \u2014 moisture 23.0%, sulfur 2560 ppm, product 'Single Diced Peaches', WO# 11392 \u2014 which MATCHES Olive's COA p4 and Extra-Case SQR p10 values. CraftMark's original-run averages (24.5% / 2240 ppm) are backup-source reference data only."
+  },
+  "olive_p-07.png": {
+    "form_type_guess": "trailer_cargo",
+    "form_title_text": "TRAILER / CARGO INSPECTION (Product) \u2014 Page 1",
+    "wo_numbers": [
+      "11392"
+    ],
+    "po_numbers": [
+      "15520"
+    ],
+    "customer_name": "Olive Nation",
+    "product_description": "Single Diced Peaches",
+    "carrier": "FedEx",
+    "dates": [
+      {
+        "label": "Date",
+        "value": "01/29/2026"
+      },
+      {
+        "label": "Verified By Date",
+        "value": "01/29/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "1 case (Comments: 1 Cs.)",
+        "cases": 1,
+        "total_lbs": null
+      }
+    ],
+    "shipping_inspection_items": [
+      {
+        "item": "Excessive dirt / debris",
+        "status": "Okay"
+      },
+      {
+        "item": "Insect / rodent contamination",
+        "status": "Okay"
+      },
+      {
+        "item": "Foreign material",
+        "status": "Okay"
+      },
+      {
+        "item": "Toxic chemicals",
+        "status": "Okay"
+      },
+      {
+        "item": "Animal contamination",
+        "status": "Okay"
+      },
+      {
+        "item": "Strong odors",
+        "status": "Okay"
+      },
+      {
+        "item": "Spillage from prior or current cargo",
+        "status": "Okay"
+      },
+      {
+        "item": "Dampness / moisture",
+        "status": "Okay"
+      },
+      {
+        "item": "Floor, wall, ceiling in good condition",
+        "status": "Okay"
+      },
+      {
+        "item": "Product loaded if refrigerated trailer",
+        "status": "Okay"
+      }
+    ],
+    "comments_corrective_actions": "1 Cs.",
+    "packaging_information": {
+      "qty_pallets_shipped": 0,
+      "qty_pallets_received": null,
+      "hand_stacked": true,
+      "qty_cases_verified_by_driver": "Yes"
+    },
+    "shipment_decision": "Accepted",
+    "initials_present": [
+      {
+        "location": "Verified By (signature)",
+        "value": "Erin Garcia"
+      },
+      {
+        "location": "Confirmed by (signature)",
+        "value": "Erin Garcia"
+      },
+      {
+        "location": "Driver Signature",
+        "value": "Edwin Heron"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Trailer/Cargo inspection \u2014 all 10 shipping items marked Okay. 1 case shipped via FedEx, hand-stacked. Driver signed."
+  },
+  "mark_p-13.png": {
+    "form_type_guess": "sqr_checkoff",
+    "form_title_text": "CALIFORNIA FRUIT INC. SORTING QUALITY REPORT CHECKOFF LIST",
+    "wo_numbers": [
+      "11471"
+    ],
+    "po_numbers": [
+      "Verbal/Mark 1/12/26"
+    ],
+    "customer_name": "Mark Keshishian & Sons",
+    "product_description": "Sweet Sue Raisins",
+    "dates": [
+      {
+        "label": "PO Note",
+        "value": "Verbal order from Mark 1/12/26"
+      }
+    ],
+    "quantities": [],
+    "initials_present": [
+      {
+        "location": "Verification (Production Control)",
+        "value": "JM"
+      },
+      {
+        "location": "2nd Verification (Office Administration)",
+        "value": "VM"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "1. COVER SHEET",
+        "checked": true
+      },
+      {
+        "item": "2. QUALITY CONTROL FORMS",
+        "checked": true
+      },
+      {
+        "item": "3. CASE METAL DETECTOR FORM",
+        "checked": false,
+        "note": "blank"
+      },
+      {
+        "item": "4. PRODUCT USED",
+        "checked": true
+      },
+      {
+        "item": "5. DOCUMENTATION FORMS",
+        "checked": true
+      },
+      {
+        "item": "6. LOOSE METAL DETECTOR FINDINGS",
+        "checked": false,
+        "note": "NO FINDINGS"
+      },
+      {
+        "item": "7. CASE METAL DETECTOR FINDINGS",
+        "checked": false,
+        "note": "NO FINDINGS"
+      },
+      {
+        "item": "8. SCANNED (INC, FRONT OFFICE)",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Verbal PO from Mark 1/12/26 noted in PO field \u2014 confirm with office records that no formal PO# was issued."
+  },
+  "mark_p-14.png": {
+    "form_type_guess": "sqr_extra_case",
+    "form_title_text": "EXTRA CASE - SORTING QUALITY REPORT",
+    "wo_numbers": [
+      "11471",
+      "5170"
+    ],
+    "po_numbers": [
+      "Verbal/Mark 1/12/26"
+    ],
+    "customer_name": "Mark Keshishian & Sons",
+    "product_description": "Sweet Sue Raisins",
+    "dates": [
+      {
+        "label": "Date Inspected",
+        "value": "01/13/2026"
+      },
+      {
+        "label": "Start",
+        "value": "6:40"
+      },
+      {
+        "label": "End",
+        "value": "6:45"
+      },
+      {
+        "label": "Original Production Date",
+        "value": "06/27/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "3 cs @ 30 lbs",
+        "cases": 3,
+        "lbs_per_case": 30,
+        "total_lbs": 90
+      }
+    ],
+    "moisture_pct": 17.7,
+    "sulfur_ppm": null,
+    "crop_year": "2025",
+    "initials_present": [
+      {
+        "location": "QC",
+        "value": "JS"
+      },
+      {
+        "location": "Case Metal Detector Initials",
+        "value": "JS"
+      },
+      {
+        "location": "Verification",
+        "value": "JM"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "NO New WO#",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "metal_detector_findings": "Pass",
+    "notes": "Sulfur reading shown as N/A (raisins are unsulfured). Original WO# 5170, current WO# 11471."
+  },
+  "mark_p-15.png": {
+    "form_type_guess": "coa",
+    "form_title_text": "CERTIFICATE OF ANALYSIS",
+    "wo_numbers": [
+      "11471"
+    ],
+    "po_numbers": [
+      "Verbal"
+    ],
+    "customer_name": "Mark Keshishian & Sons",
+    "product_description": "Sweet Sue Raisins",
+    "product_code": null,
+    "dates": [
+      {
+        "label": "Shipped Date",
+        "value": "01/13/2026"
+      },
+      {
+        "label": "Production Date",
+        "value": "06/27/2025"
+      },
+      {
+        "label": "Date Inspected",
+        "value": "01/13/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "3 cases @ 30 lbs",
+        "cases": 3,
+        "lbs_per_case": 30,
+        "total_lbs": 90
+      }
+    ],
+    "moisture_pct": 17.7,
+    "sulfur_ppm": null,
+    "crop_year": "2025",
+    "initials_present": [
+      {
+        "location": "Prepared by",
+        "value": "JS"
+      },
+      {
+        "location": "Verified by",
+        "value": "JM"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Sweet Sue Raisins, unsulfured."
+  },
+  "mark_p-19.png": {
+    "form_type_guess": "extra_cases_used",
+    "form_title_text": "EXTRA CASES USED FROM COLD STORAGE",
+    "wo_numbers": [
+      "11471"
+    ],
+    "po_numbers": [],
+    "customer_name": "Mark Keshishian & Sons",
+    "product_description": "Sweet Sue Raisins",
+    "dates": [
+      {
+        "label": "Date",
+        "value": "01/13/2026"
+      },
+      {
+        "label": "Original Pack Date",
+        "value": "06/27/2025"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "3 cases @ 30 lb from WO 5170",
+        "cases": 3,
+        "lbs_per_case": 30,
+        "total_lbs": 90
+      }
+    ],
+    "moisture_pct": null,
+    "sulfur_ppm": null,
+    "crop_year": null,
+    "initials_present": [
+      {
+        "location": "DOC",
+        "value": "JM"
+      },
+      {
+        "location": "QC",
+        "value": "JS"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "NO NEW WO#",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": ""
+  },
+  "mark_p-20.png": {
+    "form_type_guess": "stamp_log",
+    "form_title_text": "STAMP LOG",
+    "wo_numbers": [
+      "11471"
+    ],
+    "po_numbers": [],
+    "customer_name": "Mark Keshishian & Sons",
+    "product_description": "Sweet Sue Raisins",
+    "product_code": "RAISINS-SWEETSUE-PKZ",
+    "dates": [
+      {
+        "label": "Date",
+        "value": "01/13/2026"
+      },
+      {
+        "label": "Packed date (label)",
+        "value": "01/13/2026"
+      },
+      {
+        "label": "Start Up Time",
+        "value": "6:40"
+      },
+      {
+        "label": "End Of Shift Time",
+        "value": "6:45"
+      }
+    ],
+    "initials_present": [
+      {
+        "location": "Start Up Documentation",
+        "value": "JM"
+      },
+      {
+        "location": "Start Up QC",
+        "value": "JS"
+      },
+      {
+        "location": "End Of Shift Documentation",
+        "value": "JM"
+      },
+      {
+        "location": "End Of Shift QC",
+        "value": "JS"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "USED Extra Cases YES",
+        "checked": true
+      },
+      {
+        "item": "Tumbler Line",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Lot # 11471. 30 LB CASE. Single-shift extra-case run."
+  },
+  "mark_p-04.png": {
+    "form_type_guess": "coa",
+    "form_title_text": "CERTIFICATE OF ANALYSIS",
+    "wo_numbers": [
+      "11471"
+    ],
+    "po_numbers": [],
+    "customer_name": "Mark Keshishian & Sons",
+    "product_description": "Sweet Sue Raisins",
+    "dates": [
+      {
+        "label": "Shipped Date",
+        "value": "01/13/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "3 cases @ 30 lbs",
+        "cases": 3,
+        "lbs_per_case": 30,
+        "total_lbs": 90
+      }
+    ],
+    "moisture_pct": null,
+    "sulfur_ppm": null,
+    "is_defect_bag_photo": false,
+    "notes": "Front COA for Mark Keshishian shipment"
+  },
+  "mark_p-07.png": {
+    "form_type_guess": "trailer_cargo",
+    "form_title_text": "TRAILER / CARGO INSPECTION",
+    "wo_numbers": [
+      "11471"
+    ],
+    "po_numbers": [],
+    "customer_name": "Mark Keshishian & Sons",
+    "product_description": "Sweet Sue Raisins",
+    "dates": [
+      {
+        "label": "Date",
+        "value": "01/13/2026"
+      }
+    ],
+    "initials_present": [
+      {
+        "location": "Verified By",
+        "value": "VM"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Carrier FedEx; multi-package (3 boxes)."
+  },
+  "bal_p-17.png": {
+    "form_type_guess": "sqr_checkoff",
+    "form_title_text": "CALIFORNIA FRUIT INC. SORTING QUALITY REPORT CHECKOFF LIST",
+    "wo_numbers": [
+      "11555"
+    ],
+    "po_numbers": [
+      "28-9017-2"
+    ],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Pears",
+    "dates": [
+      {
+        "label": "2nd Verification",
+        "value": "04/02/2026"
+      }
+    ],
+    "initials_present": [
+      {
+        "location": "Verification (Production Control)",
+        "value": "JM"
+      },
+      {
+        "location": "2nd Verification (Office Administration)",
+        "value": "VM"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "1. COVER SHEET",
+        "checked": true
+      },
+      {
+        "item": "2. QUALITY CONTROL FORMS",
+        "checked": true
+      },
+      {
+        "item": "3. CASE METAL DETECTOR FORM",
+        "checked": false,
+        "note": "marked NA"
+      },
+      {
+        "item": "4. PRODUCT USED",
+        "checked": true
+      },
+      {
+        "item": "5. DOCUMENTATION FORMS",
+        "checked": true
+      },
+      {
+        "item": "6. LOOSE METAL DETECTOR FINDINGS",
+        "checked": false,
+        "note": "NO FINDINGS"
+      },
+      {
+        "item": "7. CASE METAL DETECTOR FINDINGS",
+        "checked": false,
+        "note": "NO FINDINGS"
+      },
+      {
+        "item": "8. SCANNED (INC, FRONT OFFICE)",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "metal_detector_findings": "NO FINDINGS",
+    "notes": "Sub-packet 1 of 2 in Balcorp packet. Customer: Balcorp Limited. Product: Jumbo Pears."
+  },
+  "bal_p-22.png": {
+    "form_type_guess": "sqr_checkoff",
+    "form_title_text": "CALIFORNIA FRUIT INC. SORTING QUALITY REPORT CHECKOFF LIST",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [
+      "28-9017-2"
+    ],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Peaches",
+    "dates": [
+      {
+        "label": "2nd Verification",
+        "value": "04/02/2026"
+      }
+    ],
+    "initials_present": [
+      {
+        "location": "Verification (Production Control)",
+        "value": "AA"
+      },
+      {
+        "location": "2nd Verification (Office Administration)",
+        "value": "VM"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "1. COVER SHEET",
+        "checked": true
+      },
+      {
+        "item": "2. QUALITY CONTROL FORMS",
+        "checked": true
+      },
+      {
+        "item": "3. CASE METAL DETECTOR FORM",
+        "checked": false,
+        "note": "marked NA"
+      },
+      {
+        "item": "4. PRODUCT USED",
+        "checked": true
+      },
+      {
+        "item": "5. DOCUMENTATION FORMS",
+        "checked": true
+      },
+      {
+        "item": "6. LOOSE METAL DETECTOR FINDINGS",
+        "checked": false,
+        "note": "NO FINDINGS"
+      },
+      {
+        "item": "7. CASE METAL DETECTOR FINDINGS",
+        "checked": false,
+        "note": "NO FINDINGS"
+      },
+      {
+        "item": "8. SCANNED (INC, FRONT OFFICE)",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "metal_detector_findings": "NO FINDINGS",
+    "notes": "Sub-packet 2 of 2 in Balcorp packet. Customer: Balcorp Limited. Product: Jumbo Peaches."
+  },
+  "bal_p-21.png": {
+    "form_type_guess": "stamp_log",
+    "form_title_text": "STAMP LOG",
+    "wo_numbers": [
+      "11555"
+    ],
+    "po_numbers": [],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Pears",
+    "product_code": "PEARS-JUMBO",
+    "dates": [
+      {
+        "label": "Date",
+        "value": "03/18/2026 - 03/19/2026"
+      },
+      {
+        "label": "Packed date (label)",
+        "value": "03/19/2026"
+      },
+      {
+        "label": "Start Up Time",
+        "value": "6:11"
+      },
+      {
+        "label": "End Of Shift Time",
+        "value": "9:20"
+      }
+    ],
+    "initials_present": [
+      {
+        "location": "Start Up Documentation",
+        "value": "AA"
+      },
+      {
+        "location": "Start Up QC",
+        "value": "AA"
+      },
+      {
+        "location": "End Of Shift Documentation",
+        "value": "AA"
+      },
+      {
+        "location": "End Of Shift QC",
+        "value": "AA"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "USED Extra Cases YES",
+        "checked": true
+      },
+      {
+        "item": "Tumbler Line",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Lot # 11555. PEARS-JUMBO 25 LB. Two-day full run (3/18-3/19/2026)."
+  },
+  "bal_p-04.png": {
+    "form_type_guess": "coa",
+    "form_title_text": "CERTIFICATE OF ANALYSIS",
+    "wo_numbers": [
+      "11555"
+    ],
+    "po_numbers": [
+      "28-9017-2"
+    ],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Pears",
+    "dates": [
+      {
+        "label": "Shipped Date",
+        "value": "03/27/2026"
+      },
+      {
+        "label": "Production Date",
+        "value": "03/19/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "320 cases @ 25 lbs",
+        "cases": 320,
+        "lbs_per_case": 25,
+        "total_lbs": 8000
+      }
+    ],
+    "moisture_pct": 24.5,
+    "sulfur_ppm": 2240,
+    "crop_year": "2024-2025",
+    "initials_present": [
+      {
+        "location": "Prepared by",
+        "value": "JS"
+      },
+      {
+        "location": "Verified by",
+        "value": "JM"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "WO 11555 \u2014 Jumbo Pears."
+  },
+  "bal_p-05.png": {
+    "form_type_guess": "coa",
+    "form_title_text": "CERTIFICATE OF ANALYSIS",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [
+      "28-9017-2"
+    ],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Peaches",
+    "dates": [
+      {
+        "label": "Shipped Date",
+        "value": "04/01/2026"
+      },
+      {
+        "label": "Production Date",
+        "value": "03/26/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "320 cases @ 25 lbs",
+        "cases": 320,
+        "lbs_per_case": 25,
+        "total_lbs": 8000
+      }
+    ],
+    "moisture_pct": 24.5,
+    "sulfur_ppm": 2240,
+    "crop_year": "2024-2025",
+    "initials_present": [
+      {
+        "location": "Prepared by",
+        "value": "JS"
+      },
+      {
+        "location": "Verified by",
+        "value": "JM"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "WO 11560 \u2014 Jumbo Peaches."
+  },
+  "bal_p-44.png": {
+    "form_type_guess": "bin_tag",
+    "form_title_text": "Bin Tags (multiple)",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Peaches",
+    "product_code": "PEACHES-RAW-JUMBO",
+    "dates": [
+      {
+        "label": "Bin tag 1 received",
+        "value": "08/17/2024"
+      },
+      {
+        "label": "Bin tag 2 received",
+        "value": "08/16/2025"
+      },
+      {
+        "label": "Process date (handwritten)",
+        "value": "03/16/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "Bin 1 net wt 845 lb (Crop 2024)",
+        "lbs_per_case": null,
+        "cases": null,
+        "total_lbs": 845
+      },
+      {
+        "description": "Bin 2 net wt 821 lb (Crop 2025)",
+        "lbs_per_case": null,
+        "cases": null,
+        "total_lbs": 821
+      }
+    ],
+    "moisture_pct": null,
+    "sulfur_ppm": 3504,
+    "crop_year": "2024-2025",
+    "initials_present": [
+      {
+        "location": "INT (Inspector)",
+        "value": "MS"
+      },
+      {
+        "location": "INT",
+        "value": "MS"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "Inspected OK stamp",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Two bin tags side-by-side. Buyer: Balcorp Limited handwritten. Process: 3-16-26. Batch: 11560. Sulphur PPM 3,648 + 3,360 (averaged)."
+  },
+  "bal_p-43.png": {
+    "form_type_guess": "bin_tag",
+    "form_title_text": "Bin Tags (multiple)",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Peaches",
+    "product_code": "PEACHES-RAW-JUMBO",
+    "dates": [
+      {
+        "label": "Bin tag 1 received",
+        "value": "08/20/2025"
+      },
+      {
+        "label": "Bin tag 2 received",
+        "value": "08/20/2025"
+      },
+      {
+        "label": "Process date",
+        "value": "03/16/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "Bin 1 net wt 937 lb (Crop 2025)",
+        "total_lbs": 937
+      },
+      {
+        "description": "Bin 2 net wt 879 lb (Crop 2025)",
+        "total_lbs": 879
+      }
+    ],
+    "sulfur_ppm": 3200,
+    "crop_year": "2025",
+    "initials_present": [
+      {
+        "location": "INT",
+        "value": "HS"
+      },
+      {
+        "location": "INT",
+        "value": "HS"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "Inspected OK stamp",
+        "checked": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Buyer: Balcorp Limited. Process: 3-16-26. Batch: 11560."
+  },
+  "bal_p-23.png": {
+    "form_type_guess": "sqr_full",
+    "form_title_text": "SORTING QUALITY REPORT",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [
+      "28-9017-2"
+    ],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Peaches",
+    "dates": [
+      {
+        "label": "Production Date",
+        "value": "03/26/2026"
+      }
+    ],
+    "moisture_pct": 24.5,
+    "sulfur_ppm": 2240,
+    "is_defect_bag_photo": false,
+    "notes": "SQR header for WO 11560 Jumbo Peaches."
+  },
+  "bal_p-25.png": {
+    "form_type_guess": "lab_findings",
+    "form_title_text": "SORTING QUALITY REPORT \u2014 LAB",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Peaches",
+    "initials_present": [
+      {
+        "location": "Pallet 2 Initials",
+        "value": "SA"
+      },
+      {
+        "location": "Pallet 2 Verification",
+        "value": "RA"
+      },
+      {
+        "location": "Pallet 3 Initials",
+        "value": "SA"
+      },
+      {
+        "location": "Pallet 3 Verification",
+        "value": "RA"
+      },
+      {
+        "location": "Pallet 4 Initials",
+        "value": "SA"
+      },
+      {
+        "location": "Pallet 4 Verification",
+        "value": "RA"
+      },
+      {
+        "location": "Pallet 5 Initials",
+        "value": "SA"
+      },
+      {
+        "location": "Pallet 5 Verification",
+        "value": "RA"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Lab findings per pallet. Defects include Pit Fragments (highlighted yellow), Hair, Paint, Mold, Discolored, Off-size etc. All pallets 'Meets Specs'."
+  },
+  "bal_p-46.png": {
+    "form_type_guess": "pull_ticket",
+    "form_title_text": "CFB01 California Fruit Basket \u2014 PULL TICKET",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [],
+    "customer_name": null,
+    "product_description": "Peaches Raw 66 / 84 / Jumbo (multiple bins)",
+    "dates": [
+      {
+        "label": "Due Date",
+        "value": "03/27/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "Total quantity 8,000 lb",
+        "total_lbs": 8000
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Sage pull ticket listing all bins pulled for WO 11560. Multiple bin lots from BRANDT PACKING, SUN VALLEY KAHEAH, MOONLIGHT REEDLEY YELL, MOONLIGHT REEDLEY-MR with crop year 2024 and 2025."
+  },
+  "bal_p-48.png": {
+    "form_type_guess": "sort_out_form",
+    "form_title_text": "SORT OUT FORM (FIRST PAGE)",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [
+      "28-9017-2"
+    ],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Peaches",
+    "dates": [
+      {
+        "label": "Date",
+        "value": "03/25/2026"
+      }
+    ],
+    "crop_year": "2024-2026",
+    "is_defect_bag_photo": false,
+    "notes": "7 bin columns (4469, 4478, 4465, 4474, 4475, 4480, 4481). 4 Pallets @ 80 cs. Yellow sticky note: 'L1 crossed out? Yes did not pack only Resorted JM'."
+  },
+  "bal_p-49.png": {
+    "form_type_guess": "sort_out_form",
+    "form_title_text": "SORT OUT FORM (SECOND PAGE)",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [
+      "28-9017-2"
+    ],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Peaches",
+    "dates": [
+      {
+        "label": "Date",
+        "value": "03/25/2026"
+      }
+    ],
+    "crop_year": "2024-2026",
+    "is_defect_bag_photo": false,
+    "notes": "Multi-bin sort-out continuation page. Cases per Pallet/Bags per Bin: Resorting."
+  },
+  "bal_p-50.png": {
+    "form_type_guess": "sort_out_form",
+    "form_title_text": "SORT OUT FORM (continuation)",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [
+      "28-9017-2"
+    ],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Peaches",
+    "dates": [
+      {
+        "label": "Date",
+        "value": "03/26/2026"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Sort-out continuation."
+  },
+  "bal_p-51.png": {
+    "form_type_guess": "sort_out_form",
+    "form_title_text": "SORT OUT FORM (continuation)",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [
+      "28-9017-2"
+    ],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Peaches",
+    "is_defect_bag_photo": false,
+    "notes": "Sort-out continuation."
+  },
+  "bal_p-52.png": {
+    "form_type_guess": "stamp_log",
+    "form_title_text": "STAMP LOG",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Peaches",
+    "product_code": "PEACHES-JUMBO",
+    "dates": [
+      {
+        "label": "Date",
+        "value": "03/25/2026 - 03/26/2026"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "Lot # 11560. Multi-day full run."
+  },
+  "bal_p-33.png": {
+    "form_type_guess": "container_workmanship",
+    "form_title_text": "CONTAINER WORKMANSHIP RECORD",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [
+      "28-9017-2"
+    ],
+    "customer_name": "Balcorp Limited",
+    "product_description": "Jumbo Peaches",
+    "dates": [
+      {
+        "label": "Verification Date",
+        "value": "03/25/2026"
+      },
+      {
+        "label": "Second Verification Date",
+        "value": "03/27/2026"
+      }
+    ],
+    "initials_present": [
+      {
+        "location": "Operator",
+        "value": "SA"
+      },
+      {
+        "location": "Verification",
+        "value": "AA"
+      },
+      {
+        "location": "Second Verification",
+        "value": "VM"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "Verify scale readings (5 pallets + 1 bin)",
+        "checked": true
+      },
+      {
+        "item": "Verify gross weight (all)",
+        "checked": true
+      },
+      {
+        "item": "Verify quality of seals on cases",
+        "checked": true
+      },
+      {
+        "item": "Verify quality of seals on bags",
+        "checked": true
+      },
+      {
+        "item": "Verify through metal detector \u2014 PASS x6",
+        "checked": true
+      }
+    ],
+    "metal_detector_findings": "PASS",
+    "is_defect_bag_photo": false,
+    "notes": "All 5 pallets + 1 bin (X-C resort) verified. Note: 'Back labels for Pallet 5 ran out 3/27 SO'."
+  },
+  "bal_p-26.png": {
+    "form_type_guess": "defect_bag_photo",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [],
+    "customer_name": "Balcorp Limited",
+    "product_description": null,
+    "is_defect_bag_photo": true,
+    "defect_bag_label": "WO# 11560 Pit Fragment (4)",
+    "notes": "Bag with sticky-note label, multiple pieces of fruit shown."
+  },
+  "bal_p-28.png": {
+    "form_type_guess": "defect_bag_photo",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [],
+    "customer_name": "Balcorp Limited",
+    "is_defect_bag_photo": true,
+    "defect_bag_label": "WO# 11560 Hair",
+    "notes": "Bag with sticky-note 'WO# 11560 Hair', single piece of fruit shown."
+  },
+  "bal_p-31.png": {
+    "form_type_guess": "defect_bag_photo",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [],
+    "customer_name": "Balcorp Limited",
+    "is_defect_bag_photo": true,
+    "defect_bag_label": "WO# 11560 Paint",
+    "notes": "Bag with sticky-note 'WO# 11560 Paint'."
+  },
+  "bal_p-29.png": {
+    "form_type_guess": "defect_bag_photo",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [],
+    "customer_name": "Balcorp Limited",
+    "is_defect_bag_photo": true,
+    "defect_bag_label": "WO# 11560 Defect (specific type illegible at this resolution)",
+    "notes": "Bag with sticky-note label."
+  },
+  "bal_p-32.png": {
+    "form_type_guess": "defect_bag_photo",
+    "wo_numbers": [
+      "11560"
+    ],
+    "po_numbers": [],
+    "customer_name": "Balcorp Limited",
+    "is_defect_bag_photo": true,
+    "defect_bag_label": "WO# 11560 Defect",
+    "notes": "Bag photo."
+  },
+  "pedrick_p-01.png": {
+    "form_type_guess": "invoice",
+    "form_title_text": "INVOICE \u2014 California Fruit Basket",
+    "wo_numbers": [],
+    "po_numbers": [
+      "Verbal/Aaron 4/6/26"
+    ],
+    "invoice_number": "INV004584",
+    "bol_number": null,
+    "customer_name": "Pedrick Produce",
+    "product_description": "(multi-product order)",
+    "product_code": null,
+    "dates": [
+      {
+        "label": "Invoice date",
+        "value": "04/28/2026"
+      },
+      {
+        "label": "Ship Date",
+        "value": "04/28/2026"
+      },
+      {
+        "label": "Due Date",
+        "value": "05/28/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "GOTS-EXTRA-RIPE / APRICOTS, SLAB",
+        "lbs": 1200
+      },
+      {
+        "description": "NECTS-EXTRA-FANCY",
+        "lbs": 750
+      },
+      {
+        "description": "PEACHES-EXTRA-FANCY",
+        "lbs": 750
+      },
+      {
+        "description": "PEAR-X-CHOICE",
+        "lbs": 750
+      }
+    ],
+    "moisture_pct": null,
+    "sulfur_ppm": null,
+    "crop_year": null,
+    "initials_present": [
+      {
+        "location": "SCANNED stamp",
+        "value": "EG 5-7-2026"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "all_fields": {
+      "Customer code": "BPC-000172",
+      "Your reference": "Verbal/Aaron 4/6/26",
+      "Order no.": "CFB0126SC00073",
+      "Delivery no.": "CFB01260ISDH00000027",
+      "Bill-to address": "Pedrick Produce, 1285 Stratford Ave Suite 9 #105, Dixon CA 95620",
+      "Ship-to address": "Pedrick Produce, 6850 Sievers Road, Dixon CA 95620",
+      "Phone": "707-678-1814"
+    },
+    "notes": "Multi-product invoice, 4 line items + total. Total amount $18,775; pallet $23; net payable $18,798 USD."
+  },
+  "pedrick_p-02.png": {
+    "form_type_guess": "invoice",
+    "form_title_text": "INVOICE \u2014 page 2 (totals)",
+    "customer_name": "Pedrick Produce",
+    "all_fields": {
+      "Total Amount": "18775.00",
+      "Pallet": "23.00",
+      "NET PAYABLE": "18798.00 USD"
+    },
+    "is_defect_bag_photo": false,
+    "notes": "Continuation page of invoice, totals only."
+  },
+  "pedrick_p-03.png": {
+    "form_type_guess": "fpp",
+    "form_title_text": "PEDRICK PRODUCE \u2014 Order summary cover sheet",
+    "wo_numbers": [],
+    "po_numbers": [
+      "Verbal/Aaron 4/6/26"
+    ],
+    "customer_name": "Pedrick Produce",
+    "product_description": "(multi-product)",
+    "dates": [
+      {
+        "label": "Order Date",
+        "value": "04/06/2026"
+      },
+      {
+        "label": "Call In",
+        "value": "9:30 AM"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "Order-level total: 140 cs across 4 products (50 Apricots + 30 Nectarines + 30 Peaches + 30 Pears)",
+        "cases": 140,
+        "lbs_per_case": 25,
+        "total_lbs": 3500
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "highlighted_regions": [
+      {
+        "region": "PO# field",
+        "marker_color": "green",
+        "values": [
+          "Verbal/Aaron 4/6/26"
+        ]
+      },
+      {
+        "region": "Notes box",
+        "marker_color": "yellow",
+        "values": [
+          "Order will be ready for pickup on Monday, April 27th"
+        ]
+      }
+    ],
+    "all_fields": {
+      "By (taken by)": "Aaron",
+      "Bill-to address": "Pedrick Produce, 6850 Sievers Road, Dixon CA 95620",
+      "Phone": "(707) 678-1814",
+      "Terms": "Net 30 Days",
+      "Total quantity": "110",
+      "Total amount due": "$18,775.00",
+      "Total Net Wt": "3500 LB",
+      "Total Gross Wt": "3710 LB",
+      "Notes": "Order will be ready for pickup on Monday, April 27th"
+    },
+    "notes": "Pedrick Produce's own letterhead order form attached to packet. Contains all 4 products with case counts and weights."
+  },
+  "pedrick_p-04.png": {
+    "form_type_guess": "production_request",
+    "form_title_text": "PRODUCTION REQUEST \u2014 California Fruit Basket",
+    "wo_numbers": [
+      "11592",
+      "11578",
+      "11579",
+      "11576"
+    ],
+    "po_numbers": [
+      "Verbal/Aaron 4/6/26"
+    ],
+    "customer_name": "Pedrick Produce",
+    "product_description": "(multi-product)",
+    "dates": [
+      {
+        "label": "PR Date",
+        "value": "04/08/2026"
+      },
+      {
+        "label": "Ship Date",
+        "value": "04/27/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "COTS-EXTRA-RIPE / APRICOTS, SLAB \u2014 W.O.# 11592",
+        "wo": "11592",
+        "cases": 50,
+        "lbs_per_case": 25,
+        "total_lbs": 1250
+      },
+      {
+        "description": "NECTS-EXTRA-FANCY \u2014 Extra Cs. from W.O.# 11578",
+        "wo": "11578",
+        "cases": 30,
+        "lbs_per_case": 25,
+        "total_lbs": 750,
+        "is_extra_case": true
+      },
+      {
+        "description": "PEACHES-EXTRA-FANCY \u2014 Extra Cs. from W.O.# 11579",
+        "wo": "11579",
+        "cases": 30,
+        "lbs_per_case": 25,
+        "total_lbs": 750,
+        "is_extra_case": true
+      },
+      {
+        "description": "PEAR-X-CHOICE \u2014 Extra Cs. from W.O.# 11576",
+        "wo": "11576",
+        "cases": 30,
+        "lbs_per_case": 25,
+        "total_lbs": 750,
+        "is_extra_case": true
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "all_fields": {
+      "Order no.": "CFB0126SC00073",
+      "Customer code": "BPC-000172",
+      "Customer order ref": "Verbal/Aaron 4/6/26",
+      "Total cases": "140",
+      "Total lbs": "3500"
+    },
+    "notes": "This packet contains 4 sub-packets \u2014 1 new WO (11592 Apricots) plus 3 extra-case pulls (11578 Nectarines, 11579 Peaches, 11576 Pears). All ship 4/27/26."
+  },
+  "pedrick_p-05.png": {
+    "form_type_guess": "coa",
+    "form_title_text": "CERTIFICATE OF ANALYSIS \u2014 Extra Ripe Apricots",
+    "wo_numbers": [
+      "11592"
+    ],
+    "po_numbers": [
+      "Verbal/Aaron 4/6/26"
+    ],
+    "customer_name": "Pedrick Produce",
+    "product_description": "Extra Ripe Apricots",
+    "product_code": null,
+    "dates": [
+      {
+        "label": "Shipped Date",
+        "value": "04/28/2026"
+      },
+      {
+        "label": "Production Date",
+        "value": "04/13/2026"
+      },
+      {
+        "label": "Date Inspected",
+        "value": "04/13/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "50 Cases @ 25 lbs",
+        "cases": 50,
+        "lbs_per_case": 25,
+        "total_lbs": 1250
+      }
+    ],
+    "moisture_pct": 27.0,
+    "moisture_range": [
+      26.0,
+      28.0
+    ],
+    "sulfur_ppm": 3126,
+    "sulfur_range": [
+      1500,
+      3500
+    ],
+    "crop_year": "2025",
+    "total_defect_pct": 5.4,
+    "total_defect_pct_max": 10.0,
+    "labeling": "Extra Ripe Apricots",
+    "packaging_style": "Net Wt 25 lbs, 2 Mil Poly Bags",
+    "packaging_count": "Total of 50 Cases @ 25 lbs",
+    "initials_present": [
+      {
+        "location": "Prepared by \u2014 Quality Control",
+        "value": "Sonia Perez"
+      },
+      {
+        "location": "Verified by \u2014 Production / Office Administration",
+        "value": "(signature)"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "WO 11592 Apricots COA. Sample defect totals: S1 7.10%, S2 4.50%, S3 4.50%, average 5.4%."
+  },
+  "pedrick_p-06.png": {
+    "form_type_guess": "coa",
+    "form_title_text": "CERTIFICATE OF ANALYSIS \u2014 Extra Fancy Nectarines",
+    "wo_numbers": [
+      "11578"
+    ],
+    "po_numbers": [
+      "Verbal/Aaron 4/6/26"
+    ],
+    "customer_name": "Pedrick Produce",
+    "product_description": "Extra Fancy Nectarines",
+    "dates": [
+      {
+        "label": "Shipped Date",
+        "value": "04/28/2026"
+      },
+      {
+        "label": "Production Date",
+        "value": "04/15/2026"
+      },
+      {
+        "label": "Date Inspected",
+        "value": "04/15/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "30 Cases @ 25 lbs",
+        "cases": 30,
+        "lbs_per_case": 25,
+        "total_lbs": 750
+      }
+    ],
+    "moisture_pct": 30.0,
+    "moisture_range": [
+      26.0,
+      30.0
+    ],
+    "sulfur_ppm": 3458,
+    "sulfur_range": [
+      1500,
+      3000
+    ],
+    "crop_year": "2025",
+    "total_defect_pct": 0.3,
+    "total_defect_pct_max": 10.0,
+    "labeling": "Extra Fancy Nectarines",
+    "packaging_style": "Net Wt 25 lbs, 2 Mil Poly Bags",
+    "packaging_count": "Total of 30 Cases @ 25 lbs",
+    "initials_present": [
+      {
+        "location": "Prepared by",
+        "value": "Sonia Perez"
+      },
+      {
+        "location": "Verified by",
+        "value": "(signature)"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "WO 11578 Nectarines COA. Total defect 0.30% \u2014 well within spec."
+  },
+  "pedrick_p-07.png": {
+    "form_type_guess": "coa",
+    "form_title_text": "CERTIFICATE OF ANALYSIS \u2014 Extra Fancy Peaches",
+    "wo_numbers": [
+      "11579"
+    ],
+    "po_numbers": [
+      "Verbal/Aaron 4/6/26"
+    ],
+    "customer_name": "Pedrick Produce",
+    "product_description": "Extra Fancy Peaches",
+    "dates": [
+      {
+        "label": "Shipped Date",
+        "value": "04/28/2026"
+      },
+      {
+        "label": "Production Date",
+        "value": "04/22/2026"
+      },
+      {
+        "label": "Date Inspected",
+        "value": "04/22/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "30 Cases @ 25 lbs",
+        "cases": 30,
+        "lbs_per_case": 25,
+        "total_lbs": 750
+      }
+    ],
+    "moisture_pct": 28.0,
+    "moisture_range": [
+      26.0,
+      30.0
+    ],
+    "sulfur_ppm": 2400,
+    "sulfur_range": [
+      1500,
+      3500
+    ],
+    "crop_year": "2025",
+    "total_defect_pct": 1.45,
+    "total_defect_pct_max": 10.0,
+    "labeling": "Extra Fancy Peaches",
+    "packaging_style": "Net Wt 25 lbs, 2 Mil Poly Bags",
+    "packaging_count": "Total of 30 Cases @ 25 lbs",
+    "initials_present": [
+      {
+        "location": "Prepared by",
+        "value": "Sonia Perez"
+      },
+      {
+        "location": "Verified by",
+        "value": "(signature)"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "WO 11579 Peaches COA. Sample defect range 1.45-3.30%, average ~2%."
+  },
+  "pedrick_p-08.png": {
+    "form_type_guess": "coa",
+    "form_title_text": "CERTIFICATE OF ANALYSIS \u2014 Extra Choice Pears",
+    "wo_numbers": [
+      "11576"
+    ],
+    "po_numbers": [
+      "Verbal/Aaron 4/6/26"
+    ],
+    "customer_name": "Pedrick Produce",
+    "product_description": "Extra Choice Pears",
+    "dates": [
+      {
+        "label": "Shipped Date",
+        "value": "04/28/2026"
+      },
+      {
+        "label": "Production Date",
+        "value": "04/16/2026"
+      },
+      {
+        "label": "Date Inspected",
+        "value": "04/16/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "30 Cases @ 25 lbs",
+        "cases": 30,
+        "lbs_per_case": 25,
+        "total_lbs": 750
+      }
+    ],
+    "moisture_pct": 28.0,
+    "moisture_range": [
+      26.0,
+      28.0
+    ],
+    "sulfur_ppm": 2016,
+    "sulfur_range": [
+      1500,
+      3500
+    ],
+    "crop_year": "2025",
+    "total_defect_pct": 7.05,
+    "total_defect_pct_max": 10.0,
+    "labeling": "Extra Choice Pears",
+    "packaging_style": "Net Wt 25 lbs, 2 Mil Poly Bags",
+    "packaging_count": "Total of 30 Cases @ 25 lbs",
+    "initials_present": [
+      {
+        "location": "Prepared by",
+        "value": "Sonia Perez"
+      },
+      {
+        "location": "Verified by",
+        "value": "(signature)"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "notes": "WO 11576 Pears COA. Total defect 7.05% \u2014 high but within 10% spec."
+  },
+  "pedrick_p-09.png": {
+    "form_type_guess": "fpp",
+    "form_title_text": "Final Packed Product Sheet",
+    "wo_numbers": [
+      "11592",
+      "11578",
+      "11576",
+      "11579"
+    ],
+    "po_numbers": [
+      "Verbal/Aaron 4/6/26"
+    ],
+    "customer_name": "Pedrick Produce",
+    "product_description": "(multi-product, 4 WOs)",
+    "dates": [
+      {
+        "label": "Date Order Completed",
+        "value": "04/22/2026"
+      },
+      {
+        "label": "Production Date \u2014 Apricots",
+        "value": "04/13/2026"
+      },
+      {
+        "label": "Production Date \u2014 Nectarines",
+        "value": "04/15/2026"
+      },
+      {
+        "label": "Production Date \u2014 Pears",
+        "value": "04/16/2026"
+      },
+      {
+        "label": "Production Date \u2014 Peaches",
+        "value": "04/22/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "Order-level total: 140 cs / 3500 lbs across 4 WOs (11592 Apricots, 11578 Nectarines, 11576 Pears, 11579 Peaches)",
+        "cases": 140,
+        "lbs_per_case": 25,
+        "total_lbs": 3500
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "initials_present": [
+      {
+        "location": "Completed By",
+        "value": "Sonia Torrez"
+      }
+    ],
+    "all_fields": {
+      "Total pallets": "2",
+      "Total cases": "140",
+      "Total lbs": "3500"
+    },
+    "notes": "FPP for the whole order. 2 pallets, 140 cases, 3500 lbs total. Multiple production dates because each WO ran on a different day."
+  },
+  "pedrick_p-10.png": {
+    "form_type_guess": "bol",
+    "form_title_text": "BILL OF LADING \u2014 BOL002773",
+    "wo_numbers": [
+      "11592",
+      "11578",
+      "11579",
+      "11576"
+    ],
+    "po_numbers": [
+      "Verbal/Aaron 4/6/26"
+    ],
+    "bol_number": "BOL002773",
+    "customer_name": "Pedrick Produce",
+    "product_description": "(multi-product)",
+    "carrier": "McElwany Trucking",
+    "dates": [
+      {
+        "label": "BOL Date",
+        "value": "04/28/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "Apricot Slab \u2014 50 cs",
+        "cases": 50,
+        "total_lbs": 1325
+      },
+      {
+        "description": "Extra Fancy Nectarines \u2014 30 cs",
+        "cases": 30,
+        "total_lbs": 795
+      },
+      {
+        "description": "Extra Fancy Peaches \u2014 30 cs",
+        "cases": 30,
+        "total_lbs": 795
+      },
+      {
+        "description": "Extra Fancy Pears \u2014 30 cs",
+        "cases": 30,
+        "total_lbs": 795
+      },
+      {
+        "description": "Pallets \u2014 2 PAL",
+        "cases": 2,
+        "total_lbs": 100
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "initials_present": [
+      {
+        "location": "Shipper Signature + Date",
+        "value": "Erin Garcia 4/28/26"
+      },
+      {
+        "location": "Carrier Signature + Date",
+        "value": "(signature) 4/28/26"
+      }
+    ],
+    "all_fields": {
+      "Trailer/seal number": "4K H 4225",
+      "Truck SCAC": "9E06173",
+      "Driver": "Dennis",
+      "Total qty": "142 (140 cs + 2 pallets)",
+      "Total weight": "3,810 lb"
+    },
+    "notes": "BOL covers all 4 WOs in one shipment. McElwany Trucking, driver Dennis. 2 pallets, total weight 3,810 lb gross."
+  },
+  "pedrick_p-11.png": {
+    "form_type_guess": "trailer_cargo",
+    "form_title_text": "TRAILER / CARGO INSPECTION (Product) \u2014 Page 1",
+    "wo_numbers": [
+      "11592",
+      "11578",
+      "11579",
+      "11576"
+    ],
+    "po_numbers": [
+      "Verbal/Aaron 4/6/26"
+    ],
+    "customer_name": "Pedrick Produce",
+    "product_description": "Apricots Slab, Ex Fancy Nectarines, Ex Fancy Peaches, Ex Choice Pears",
+    "carrier": "McElwany Trucking",
+    "dates": [
+      {
+        "label": "Inspection Date",
+        "value": "04/28/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "1 pallet @ 80 cases + 1 pallet @ 60 cases (2 pallets total)",
+        "cases": 140
+      }
+    ],
+    "shipping_inspection_items": [
+      {
+        "item": "Excessive dirt / debris",
+        "status": "Okay"
+      },
+      {
+        "item": "Insect / rodent contamination",
+        "status": "Okay"
+      },
+      {
+        "item": "Foreign material",
+        "status": "Okay"
+      },
+      {
+        "item": "Toxic chemicals",
+        "status": "Okay"
+      },
+      {
+        "item": "Animal contamination",
+        "status": "Okay"
+      },
+      {
+        "item": "Strong odors",
+        "status": "Okay"
+      },
+      {
+        "item": "Spillage from prior or current cargo",
+        "status": "Okay"
+      },
+      {
+        "item": "Dampness / moisture",
+        "status": "Okay"
+      },
+      {
+        "item": "Floor, wall, ceiling in good condition",
+        "status": "Okay"
+      },
+      {
+        "item": "Product loaded if refrigerated trailer",
+        "status": "Okay"
+      }
+    ],
+    "comments_corrective_actions": "1 pallet @ 80 cases, 1 pallet @ 60 cases, 2 pallet total",
+    "packaging_information": {
+      "qty_pallets_shipped": 2,
+      "qty_pallets_received": 0,
+      "hand_stacked": true,
+      "qty_cases_verified_by_driver": "Yes"
+    },
+    "shipment_decision": "Accepted",
+    "initials_present": [
+      {
+        "location": "Verified By (signature)",
+        "value": "J.R"
+      },
+      {
+        "location": "Driver Signature",
+        "value": "(signature)"
+      },
+      {
+        "location": "Confirmed by",
+        "value": "(signature)"
+      },
+      {
+        "location": "2nd Verification",
+        "value": "Erin Garcia"
+      },
+      {
+        "location": "Date 2nd Verification",
+        "value": "4/28/26"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "all_fields": {
+      "Truck License Plate #": "9E06173",
+      "Trailer License Plate #": "4K14225"
+    },
+    "notes": "Trailer/Cargo inspection covers all 4 WOs. McElwany Trucking. All 10 shipping items marked Okay. 2 pallets hand-stacked, accepted by Pedrick."
+  },
+  "pedrick_p-12.png": {
+    "form_type_guess": "sqr_checkoff",
+    "form_title_text": "SORTING QUALITY REPORT CHECKOFF LIST",
+    "wo_numbers": [
+      "11592"
+    ],
+    "po_numbers": [
+      "Verbal/Aaron 4/6/26"
+    ],
+    "customer_name": "Pedrick Produce",
+    "product_description": "Extra Ripe Apricots",
+    "dates": [
+      {
+        "label": "2nd Verification",
+        "value": "04/30/2026"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "1. COVER SHEET",
+        "checked": true
+      },
+      {
+        "item": "2. QUALITY CONTROL FORMS",
+        "checked": true
+      },
+      {
+        "item": "3. CASE METAL DETECTOR FORM",
+        "checked": false,
+        "note": "marked NA"
+      },
+      {
+        "item": "4. PRODUCT USED",
+        "checked": true
+      },
+      {
+        "item": "5. DOCUMENTATION FORMS",
+        "checked": true
+      },
+      {
+        "item": "6. LOOSE METAL DETECTOR FINDINGS",
+        "checked": false,
+        "note": "NO FINDINGS"
+      },
+      {
+        "item": "7. CASE METAL DETECTOR FINDINGS",
+        "checked": false,
+        "note": "NO FINDINGS"
+      },
+      {
+        "item": "8. SCANNED (INC, FRONT OFFICE)",
+        "checked": true
+      }
+    ],
+    "initials_present": [
+      {
+        "location": "Verification (Production Control)",
+        "value": "AA"
+      },
+      {
+        "location": "2nd Verification (Office Administration)",
+        "value": "VM"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "metal_detector_findings": "NO FINDINGS",
+    "notes": "Sub-packet 1 \u2014 WO 11592 Extra Ripe Apricots. All 8 checkboxes accounted for, both verification signatures present."
+  },
+  "pedrick_p-13.png": {
+    "form_type_guess": "sqr_extra_case",
+    "form_title_text": "EXTRA CASE - SORTING QUALITY REPORT",
+    "wo_numbers": [
+      "11592"
+    ],
+    "po_numbers": [
+      "Verbal/Aaron 4/6/26"
+    ],
+    "customer_name": "Pedrick Produce",
+    "product_description": "Extra Ripe Apricots",
+    "dates": [
+      {
+        "label": "Date Inspected",
+        "value": "04/13/2026"
+      },
+      {
+        "label": "Start",
+        "value": "11:00"
+      },
+      {
+        "label": "End",
+        "value": "11:20"
+      },
+      {
+        "label": "Verification Date",
+        "value": "04/16/2026"
+      }
+    ],
+    "quantities": [
+      {
+        "description": "TOTAL: 50 cs @ 25 lbs (multi-pallet, multi-bin)",
+        "cases": 50,
+        "lbs_per_case": 25,
+        "total_lbs": 1250
+      }
+    ],
+    "moisture_pct": 27.0,
+    "sulfur_ppm": 3136,
+    "crop_year": "2025",
+    "original_crop_years": "2025",
+    "original_line": "L1, L2, Floor",
+    "initials_present": [
+      {
+        "location": "QC",
+        "value": "ST"
+      },
+      {
+        "location": "Verification",
+        "value": "AA"
+      },
+      {
+        "location": "2nd Verification",
+        "value": "VM"
+      }
+    ],
+    "checkbox_status": [
+      {
+        "item": "NO New WO#",
+        "checked": false
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "all_fields": {
+      "Pallet sequence": "Multiple Garry Packing pallets \u2014 9cs, 8cs, 8cs, 7cs, 6cs, 3cs, 3cs, 1cs, 5cs (each from different original WO# 11525-11533, 11459, 11489-11529, 11487, 11489, 11459, 11242, 11480)",
+      "Total cases sum": "50",
+      "Original WO source pool": "Multiple (this is a NEW WO 11592 pulled from many original-source bins)"
+    },
+    "notes": "WO 11592 is a NEW WO that pulled apricots from multiple Garry Packing original-source bins (not a single source like other extra-case orders). 50 cases @ 25 lbs total. | NOTE: This page handwrites Sulfur Reading as 3136 ppm; the COA p5 prints 3126 ppm. Real discrepancy on the packet \u2014 likely a transcription typo by the QC tech (3136 vs 3126 \u2014 a 6/2 swap is a classic handwriting confusion)."
+  },
+  "pedrick_p-14.png": {
+    "form_type_guess": "sqr_full",
+    "form_title_text": "SORTING QUALITY REPORT \u2014 original-source backup (Trader Joe's 016, WO 11525)",
+    "wo_numbers": [
+      "11525"
+    ],
+    "po_numbers": [
+      "0154652380"
+    ],
+    "customer_name": "Trader Joe's 016",
+    "product_description": "Apricot Slabs",
+    "dates": [
+      {
+        "label": "Run 1",
+        "value": "03/09/2026 09:50 - 12:40"
+      },
+      {
+        "label": "Verification Date",
+        "value": "03/16/2026"
+      }
+    ],
+    "moisture_pct": 28.2,
+    "sulfur_ppm": 3136,
+    "crop_year": "2025",
+    "original_crop_years": "2025",
+    "total_defect_pct": 17.11,
+    "initials_present": [
+      {
+        "location": "VERIFICATION",
+        "value": "AA"
+      }
+    ],
+    "is_defect_bag_photo": false,
+    "highlighted_regions": [
+      {
+        "region": "Sample Group 8 column",
+        "marker_color": "green",
+        "values": [
+          "Bin 1",
+          "Moisture 27.0",
+          "Sulfur ?",
+          "Total defects 4.32%"
+        ],
+        "interpretation": "Backup-source page for one of the bins used in Pedrick's WO 11592. Green-highlighted column 8 is the Pedrick-specific reading subset."
+      }
+    ],
+    "all_fields": {
+      "MOISTURE AVERAGE (Trader Joe's run)": "28.2",
+      "SO2 AVERAGE (Trader Joe's run)": "3136",
+      "Number of Samples": "8",
+      "Average defects %": "2.14% (17.11/8)",
+      "Bins used": "1, 2, 3, 4, 5, 6, 7 (Pallets) + 1 (Bin)"
+    },
+    "notes": "BACKUP-SOURCE PAGE. Original-run SQR for Trader Joe's 016 WO 11525, providing some of the bins used in Pedrick's WO 11592 (Apricots Slab). Green-highlighted column 8 is the Pedrick-specific data."
+  }
+}

@@ -1,0 +1,131 @@
+﻿# California Fruit Inc â€” Verification Rules Toggles
+# Turn rules on/off without code changes.
+
+rules:
+  identity_match:                # WO/PO/Customer/Product cross-reference
+    enabled: true
+    severity: fail
+  numerical_reconciliation:      # BagÃ—weight, sort-out totals, packet weight
+    enabled: true
+    severity: fail
+  initials_signatures:           # Verification + 2nd Verification + per-form initials
+    enabled: true
+    severity: info               # Hard to detect via OCR â€” "info" until vision OCR is enabled
+  defect_photos:                 # Each listed defect has a matching bag photo
+    enabled: true
+    severity: info
+  bin_pull_ticket_recon:         # Bin tags â†” Pull Ticket rows
+    enabled: true
+    severity: fail
+  spec_validity:                 # Moisture/sulfur/aflatoxin within customer spec
+    enabled: true
+    severity: fail
+    require_specs_loaded: true
+  trader_joes_exception:         # TJ packets don't need BOL or Trailer/Cargo
+    enabled: true
+  required_forms:                # Required-form inventory check
+    enabled: true
+    severity: fail
+  field_coverage_audit:          # Detect when a page is missing fields it should have
+    enabled: true
+    severity: info               # Coverage gaps surface as info notes, not failures
+    # For each form code, list the fields that SHOULD be detected on a complete page.
+    # Coverage check: if any of these is missing on a page of that type, raise an info.
+    # New form codes get added here over time. Auto-discovery handles fields we don't list.
+    expected_fields_by_form:
+      COA:        [wo, po, customer, product, dates, cases, unit_lbs, total_lbs,
+                   moisture_pct, sulfur_ppm, crop_year, total_defect_pct]
+      SQR_XC:     [wo, po, customer, product, dates, cases, unit_lbs, total_lbs,
+                   moisture_pct, sulfur_ppm, crop_year, original_crop_years,
+                   original_line, initials_present]
+      SQR_FULL:   [wo, customer, product, dates, moisture_pct, sulfur_ppm,
+                   crop_year, total_defect_pct, initials_present]
+      SQR_CHK:    [wo, po, customer, product, checkbox_status, initials_present]
+      FPP:        [wo, po, customer, product, dates, cases, unit_lbs, total_lbs]
+      BOL:        [wo, po, bol_no, customer, product, dates, carrier]
+      TRAILER:    [wo, po, customer, product, dates, carrier,
+                   shipping_inspection_items, shipment_decision, initials_present]
+      INV:        [invoice_no, customer, product, dates, cases]
+      PO:         [po, customer, product, cases, unit_lbs]
+      PROD_REQ:   [wo, po, customer, product, dates]
+      STAMP:      [wo, customer, product, dates, initials_present]
+      XC_USED:    [wo, po, customer, product, dates, cases, unit_lbs, initials_present]
+      BIN_TAG:    [wo, customer, dates, sulfur_ppm, crop_year]
+      PULL:       [wo, dates, total_lbs]
+      SORT_OUT:   [wo, po, customer, product, dates, crop_year]
+      CONTAINER:  [wo, po, customer, product, dates, initials_present, metal_detector_findings]
+      LMD:        [wo, dates, metal_detector_findings, initials_present]
+      CMD:        [wo, dates, metal_detector_findings, initials_present]
+      PRETEST:    [wo, customer, product, dates, moisture_pct, sulfur_ppm]
+
+  cross_reference_matrix:        # Build full field Ã— page matrix as Excel output
+    enabled: true                # Required for the audit trail
+    severity: info               # Informational; the matrix is documentation, not pass/fail
+    cite_sources_in_checks: true # Every check message must list the pages it cross-referenced
+    auto_discover_fields: true   # Auto-pick up any new scalar field returned by vision OCR
+                                 #   â€” no YAML edit needed when packets carry new info
+    # Fields below are the KNOWN/CANONICAL set rendered in this fixed order at
+    # the top of the matrix. Any field returned by vision OCR (or set anywhere
+    # on a PageRecord) that is not in this list is auto-appended below them
+    # alphabetically, with a humanized display label generated automatically.
+    known_fields:
+      - {key: wo,                       label: "WO #"}
+      - {key: po,                       label: "PO #"}
+      - {key: customer,                 label: "Customer"}
+      - {key: product,                  label: "Product"}
+      - {key: product_code,             label: "Product code"}
+      - {key: cases,                    label: "Cases"}
+      - {key: unit_lbs,                 label: "Lbs / case"}
+      - {key: total_lbs,                label: "Total lbs"}
+      - {key: moisture_pct,             label: "Moisture %"}
+      - {key: sulfur_ppm,               label: "Sulfur ppm"}
+      - {key: crop_year,                label: "Crop year"}
+      - {key: original_crop_years,      label: "Original crop years"}
+      - {key: original_line,            label: "Original line"}
+      - {key: carrier,                  label: "Carrier"}
+      - {key: invoice_no,               label: "Invoice #"}
+      - {key: bol_no,                   label: "BOL #"}
+      - {key: shipment_decision,        label: "Shipment decision"}
+      - {key: comments_corrective_actions, label: "Comments / corrective actions"}
+      - {key: total_defect_pct,         label: "Total defect %"}
+
+# OCR backend selection
+# tesseract: free, fast, bad on handwriting
+# vision: API call to a vision-capable LLM (Anthropic Claude / OpenAI GPT-4V / etc.)
+#         â€” required for production-quality handwriting recognition.
+ocr:
+  primary_backend: tesseract
+  handwriting_backend: vision
+  vision_provider: anthropic       # one of: anthropic, openai, google_docai, mock
+  # Trigger the vision backend on a page when:
+  #   - Tesseract returns < this many chars, OR
+  #   - The page has high marking density (likely handwriting), OR
+  #   - The page is one of the form types that always has handwriting
+  vision_trigger_min_chars: 80
+  vision_trigger_marking_pct: 0.5
+  vision_trigger_form_codes:
+    - SQR_CHK
+    - SQR_XC
+    - SQR_FULL       # Backup-source SQRs often have order-specific re-test data
+                     # in highlighted columns â€” must use vision OCR to capture
+    - XC_USED
+    - STAMP
+    - BIN_TAG
+    - TRAILER
+    - SORT_OUT
+    - CONTAINER
+    - LMD
+    - CMD
+    - LAB
+    - PRETEST
+# Output options
+output:
+  produce_marked_pdf: true
+  produce_summary_png: true
+  produce_issues_csv: true
+  produce_trace_json: true
+  ai_palette:
+    pass_color: "#288c3c"          # green âœ“
+    flag_color: "#eb8219"          # orange âœ— â€” distinct from human reviewer's red
+    info_color: "#3c6eb4"          # blue â“˜
+    highlight_color: "#fff082"     # pale yellow â€” distinct from human reviewer's bright highlighter
