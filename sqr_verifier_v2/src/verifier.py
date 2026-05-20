@@ -296,6 +296,8 @@ def extract_fields(text: str, code: str, config: Config,
     f: Dict[str, Any] = {}
 
     if vision_data and not vision_data.get("error"):
+        if vision_data.get("form_title_text"):
+            f["form_title_text"] = vision_data["form_title_text"]
         if vision_data.get("invoice_number"): f["invoice_no"] = vision_data["invoice_number"]
         if vision_data.get("bol_number"):     f["bol_no"]     = vision_data["bol_number"]
         if vision_data.get("wo_numbers"):
@@ -358,6 +360,9 @@ def extract_fields(text: str, code: str, config: Config,
             f["metal_detector_findings"] = vision_data["metal_detector_findings"]
         if vision_data.get("handwritten_corrections"):
             f["corrections"] = vision_data["handwritten_corrections"]
+        dynamic_fields = _flatten_dynamic_fields(vision_data.get("all_fields") or {})
+        for k, v in dynamic_fields.items():
+            f.setdefault(k, v)
         # ---- Auto-pick-up of every scalar field vision OCR returns ----
         # Reserved keys are processed above; everything else is forwarded
         # so the cross-reference matrix can auto-discover new fields without
@@ -370,7 +375,7 @@ def extract_fields(text: str, code: str, config: Config,
             "initials_present", "checkbox_status",
             "is_defect_bag_photo", "defect_bag_label",
             "metal_detector_findings", "handwritten_corrections",
-            "notes", "raw_text", "backend", "confidence_estimate",
+            "all_fields", "notes", "raw_text", "backend", "confidence_estimate",
             "char_count", "error",
         }
         for k, v in vision_data.items():
@@ -681,6 +686,7 @@ KNOWN_FIELD_ORDER: List[Tuple[str, str]] = [
 def _humanize_field_name(key: str) -> str:
     """Auto-generate a display label for an unknown field key."""
     s = key.replace("_", " ").strip()
+    s = re.sub(r"^field\s+", "", s)
     # Special abbreviations
     s = s.replace("pct", "%").replace("ppm", "ppm").replace("lbs", "lbs")
     s = s.replace(" no", " #").replace("wo", "WO").replace("po", "PO").replace("bol", "BOL")
@@ -695,6 +701,48 @@ def _humanize_field_name(key: str) -> str:
         else:
             out.append(w.capitalize())
     return " ".join(out)
+
+
+def _dynamic_field_key(label: str) -> str:
+    """Stable key for packet-specific fields discovered by vision OCR."""
+    s = str(label or "").strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "_", s)
+    s = re.sub(r"_+", "_", s).strip("_")
+    return f"field_{s[:80]}" if s else ""
+
+
+def _scalarize_dynamic_value(value: Any) -> Optional[Any]:
+    if value is None or value == "" or value == [] or value == {}:
+        return None
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (list, dict)):
+        try:
+            return json.dumps(value, ensure_ascii=False, sort_keys=True)
+        except TypeError:
+            return str(value)
+    return str(value)
+
+
+def _flatten_dynamic_fields(value: Any, prefix: str = "") -> Dict[str, Any]:
+    """Flatten vision `all_fields` into first-class packet matrix rows."""
+    out: Dict[str, Any] = {}
+    if isinstance(value, dict):
+        for raw_key, raw_value in value.items():
+            label = f"{prefix} {raw_key}".strip()
+            if isinstance(raw_value, dict):
+                out.update(_flatten_dynamic_fields(raw_value, label))
+            else:
+                field_key = _dynamic_field_key(label)
+                scalar = _scalarize_dynamic_value(raw_value)
+                if field_key and scalar is not None:
+                    out[field_key] = scalar
+    elif prefix:
+        field_key = _dynamic_field_key(prefix)
+        scalar = _scalarize_dynamic_value(value)
+        if field_key and scalar is not None:
+            out[field_key] = scalar
+    return out
 
 
 def discover_field_rows(pages: List[PageRecord],
@@ -2038,6 +2086,8 @@ def verify_pdf(pdf_path: str, out_dir: str,
         vision_trigger_min_chars=config.ocr_settings.get("vision_trigger_min_chars", 80),
         vision_trigger_marking_pct=config.ocr_settings.get("vision_trigger_marking_pct", 0.5),
         vision_trigger_form_codes=config.ocr_settings.get("vision_trigger_form_codes", []),
+        force_vision_all_pages=os.environ.get("FULL_PACKET_FIELD_DISCOVERY", "").strip().lower()
+        in {"1", "true", "yes", "on"},
     )
     ocr = HybridOCR(ocr_cfg)
     pages = build_pages(image_paths, work / "txt", ocr, config)

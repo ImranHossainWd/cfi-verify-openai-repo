@@ -35,7 +35,7 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-05-19-openai-gpt55"
+APP_VERSION = "2026-05-20-full-packet-discovery"
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
 UPLOAD_DIR = DATA_DIR / "uploads"
 OUTPUT_DIR = DATA_DIR / "outputs"
@@ -45,6 +45,12 @@ VISION_CACHE = Path(os.environ.get("VISION_CACHE_PATH", ROOT / "cache" / "vision
 DEFAULT_VISION_PROVIDER = os.environ.get("VISION_PROVIDER", "openai").strip().lower() or "openai"
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.4-mini")
+FULL_PACKET_FIELD_DISCOVERY = os.environ.get("FULL_PACKET_FIELD_DISCOVERY", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "150"))
 PROVIDERS = ["openai", "anthropic", "mock"]
 
@@ -325,6 +331,7 @@ async def diagnostics() -> Dict[str, Any]:
         "vision_provider": DEFAULT_VISION_PROVIDER,
         "anthropic_model": ANTHROPIC_MODEL,
         "openai_model": OPENAI_MODEL,
+        "full_packet_field_discovery": FULL_PACKET_FIELD_DISCOVERY,
         "anthropic_key_present": bool(os.environ.get("ANTHROPIC_API_KEY")),
         "openai_key_present": bool(os.environ.get("OPENAI_API_KEY")),
         "tesseract_path": shutil.which("tesseract"),

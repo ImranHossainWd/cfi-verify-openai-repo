@@ -20,6 +20,7 @@ VISION_PROVIDER=openai
 OPENAI_API_KEY=your_api_key
 OPENAI_MODEL=gpt-5.4-mini
 OPENAI_REASONING_EFFORT=none
+FULL_PACKET_FIELD_DISCOVERY=true
 SQR_DATA_DIR=/tmp/sqr-verifier
 MAX_UPLOAD_MB=150
 ```
@@ -39,9 +40,9 @@ VISION_PROVIDER=mock
 5. Add `OPENAI_API_KEY` in the service environment.
 6. Deploy.
 
-On the free tier, uploaded packets and generated artifacts are stored at `/tmp/sqr-verifier`. This is ephemeral storage: files can disappear when Render restarts or redeploys the service. Free services also spin down when idle, so the first request after inactivity can be slow. That is fine for demos, but production should move to a paid Render disk, S3-compatible storage, or a database-backed artifact store.
+Uploaded packets and generated artifacts are stored at `/tmp/sqr-verifier`. This is ephemeral storage: files can disappear when Render restarts or redeploys the service. Production should move to a paid Render disk, S3-compatible storage, or a database-backed artifact store.
 
-Cost control: printed forms are handled by Tesseract first. GPT-5.5 vision OCR is reserved for low-text pages, high-marking pages, and handwriting-heavy form types configured in `sqr_verifier_v2/config/rules.yaml`.
+Packet field discovery: with `FULL_PACKET_FIELD_DISCOVERY=true`, GPT-5.4 Mini reads every page so each packet's unique fields can be discovered before the cross-reference matrix is built. Packet-specific values returned under `all_fields` are flattened into first-class matrix rows automatically. To reduce OpenAI usage later, set `FULL_PACKET_FIELD_DISCOVERY=false`; then printed forms are handled by Tesseract first and vision is reserved for low-text pages, high-marking pages, and handwriting-heavy form types configured in `sqr_verifier_v2/config/rules.yaml`.
 
 ## Local Run
 

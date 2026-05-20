@@ -353,6 +353,7 @@ class OCRConfig:
     vision_trigger_min_chars: int = 80
     vision_trigger_marking_pct: float = 0.5
     vision_trigger_form_codes: List[str] = field(default_factory=list)
+    force_vision_all_pages: bool = False
 
 
 class HybridOCR:
@@ -377,6 +378,11 @@ class HybridOCR:
         raise ValueError(f"unknown vision_provider: {p}")
 
     def should_escalate(self, tess_result: Dict, page_meta: Dict) -> bool:
+        force_all = self.config.force_vision_all_pages or os.environ.get(
+            "FULL_PACKET_FIELD_DISCOVERY", ""
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        if force_all:
+            return True
         printed_form_codes = {"INV", "PO", "PROD_REQ", "COA", "FPP", "BOL", "SHIP_LABEL"}
         form_code = page_meta.get("form_code")
         char_count = tess_result.get("char_count", 0)
