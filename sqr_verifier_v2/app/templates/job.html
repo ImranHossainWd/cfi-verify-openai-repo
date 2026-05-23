@@ -50,11 +50,24 @@
         <h3>Flags</h3>
         <div class="flags">
         {% for flag in job.summary.failures %}
+          {% if flag.pages %}
+          <button
+            type="button"
+            class="flag flag-button"
+            data-flag-name="{{ flag.name }}"
+            data-flag-detail="{{ flag.detail }}"
+            data-flag-pages='{{ flag.pages|tojson }}'
+          >
+            <strong>{{ flag.name }}</strong>
+            <span>{{ flag.detail }}</span>
+            {% if flag.pages %}<small>Pages: {{ flag.pages|join(", ") }} · Click to review</small>{% endif %}
+          </button>
+          {% else %}
           <div class="flag">
             <strong>{{ flag.name }}</strong>
             <span>{{ flag.detail }}</span>
-            {% if flag.pages %}<small>Pages: {{ flag.pages|join(", ") }}</small>{% endif %}
           </div>
+          {% endif %}
         {% endfor %}
         </div>
       {% endif %}
@@ -78,6 +91,78 @@
     </form>
   </aside>
 </section>
+
+<div id="pageViewer" class="page-viewer" hidden>
+  <div class="page-viewer__backdrop" data-close-viewer></div>
+  <section class="page-viewer__panel" role="dialog" aria-modal="true" aria-labelledby="viewerTitle">
+    <div class="page-viewer__head">
+      <div>
+        <p class="eyebrow">Flag review</p>
+        <h2 id="viewerTitle">Page review</h2>
+        <p id="viewerDetail"></p>
+      </div>
+      <button type="button" class="icon-button" data-close-viewer aria-label="Close page viewer">×</button>
+    </div>
+    <div id="viewerPages" class="page-tabs"></div>
+    <div class="page-viewer__body">
+      <img id="viewerImage" alt="Flagged packet page">
+    </div>
+  </section>
+</div>
+
+<script>
+const activeJobId = "{{ job.id }}";
+const viewer = document.getElementById("pageViewer");
+const viewerTitle = document.getElementById("viewerTitle");
+const viewerDetail = document.getElementById("viewerDetail");
+const viewerPages = document.getElementById("viewerPages");
+const viewerImage = document.getElementById("viewerImage");
+
+function showFlagPage(flagName, flagDetail, pages) {
+  if (!pages || pages.length === 0) return;
+  viewer.hidden = false;
+  viewerTitle.textContent = flagName;
+  viewerDetail.textContent = flagDetail;
+  viewerPages.innerHTML = "";
+
+  function selectPage(pageNo, button) {
+    viewerImage.src = `/jobs/${activeJobId}/page/${pageNo}.png`;
+    viewerImage.alt = `Packet page ${pageNo} for ${flagName}`;
+    viewerPages.querySelectorAll("button").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+  }
+
+  pages.forEach((pageNo, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = `Page ${pageNo}`;
+    button.addEventListener("click", () => selectPage(pageNo, button));
+    viewerPages.appendChild(button);
+    if (index === 0) selectPage(pageNo, button);
+  });
+}
+
+document.querySelectorAll(".flag-button").forEach((button) => {
+  button.addEventListener("click", () => {
+    const pages = JSON.parse(button.dataset.flagPages || "[]");
+    showFlagPage(button.dataset.flagName, button.dataset.flagDetail, pages);
+  });
+});
+
+document.querySelectorAll("[data-close-viewer]").forEach((button) => {
+  button.addEventListener("click", () => {
+    viewer.hidden = true;
+    viewerImage.removeAttribute("src");
+  });
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !viewer.hidden) {
+    viewer.hidden = true;
+    viewerImage.removeAttribute("src");
+  }
+});
+</script>
 
 {% if job.status in ["queued", "running"] %}
 <script>

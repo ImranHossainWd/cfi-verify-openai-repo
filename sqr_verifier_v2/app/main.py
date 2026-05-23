@@ -35,7 +35,7 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-05-20-full-packet-discovery"
+APP_VERSION = "2026-05-24-clickable-flag-pages"
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
 UPLOAD_DIR = DATA_DIR / "uploads"
 OUTPUT_DIR = DATA_DIR / "outputs"
@@ -156,6 +156,22 @@ def output_files(job: Dict[str, Any]) -> List[Dict[str, str]]:
         for label, path in candidates
         if path.exists()
     ]
+
+
+def page_image_path(job: Dict[str, Any], page_no: int) -> Path:
+    if page_no < 1:
+        raise HTTPException(status_code=404, detail="Page not found")
+    out_dir = Path(job["output_dir"]).resolve()
+    packet_name = job["packet_name"]
+    candidates = [
+        out_dir / "annotated_pages" / f"p-{page_no:02d}_annot.png",
+        out_dir / "_work" / packet_name / "pages" / f"p-{page_no:02d}.png",
+    ]
+    for candidate in candidates:
+        path = candidate.resolve()
+        if out_dir in path.parents and path.exists():
+            return path
+    raise HTTPException(status_code=404, detail="Page image not found")
 
 
 def run_verification(job_id: str) -> None:
@@ -303,6 +319,13 @@ async def download(job_id: str, filename: str) -> FileResponse:
     if out_dir not in path.parents or not path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(path, filename=filename)
+
+
+@app.get("/jobs/{job_id}/page/{page_no}.png")
+async def page_image(job_id: str, page_no: int) -> FileResponse:
+    job = get_job(job_id)
+    path = page_image_path(job, page_no)
+    return FileResponse(path, media_type="image/png")
 
 
 @app.post("/jobs/{job_id}/rerun")
