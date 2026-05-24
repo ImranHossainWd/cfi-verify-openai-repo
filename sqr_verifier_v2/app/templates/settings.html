@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="detail">
+  <p class="eyebrow">No-login admin tools</p>
+  <h1>Verification settings</h1>
+  <p>Edit rules, customer aliases, and specs without changing code. Auto-discovered packet fields still flow into the matrix even when they are not listed here.</p>
+</section>
+
+{% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
+{% if error %}<div class="notice bad">{{ error }}</div>{% endif %}
+
+<section class="settings-grid">
+  <aside class="panel settings-nav">
+    {% for panel in panels %}
+      <a class="{% if panel.selected %}active{% endif %}" href="/settings?selected={{ panel.key }}">{{ panel.filename }}</a>
+    {% endfor %}
+  </aside>
+
+  {% for panel in panels %}
+    {% if panel.selected %}
+      <article class="panel">
+        <div class="panel-head">
+          <h2>{{ panel.filename }}</h2>
+          <span>YAML validated before save</span>
+        </div>
+        <form action="/settings/{{ panel.key }}" method="post" class="config-form">
+          <textarea name="content" spellcheck="false">{{ panel.content }}</textarea>
+          <button type="submit">Save {{ panel.filename }}</button>
+        </form>
+      </article>
+    {% endif %}
+  {% endfor %}
+</section>
+{% endblock %}

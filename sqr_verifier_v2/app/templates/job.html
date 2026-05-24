@@ -6,7 +6,7 @@
     <div>
       <p class="eyebrow">Packet {{ job.id }}</p>
       <h1>{{ job.packet_name }}</h1>
-      <p>{{ job.original_filename }} · OCR provider: {{ job.vision_provider }}</p>
+      <p>{{ job.original_filename }} &middot; OCR provider: {{ job.vision_provider }}</p>
     </div>
     <span id="status" class="status {{ job.status }}">{{ job.status }}</span>
   </div>
@@ -25,6 +25,7 @@
         <div><strong>{{ job.summary.fail_count }}</strong><small>Flags</small></div>
         <div><strong>{{ job.summary.info_count }}</strong><small>Notes</small></div>
       </div>
+
       {% if job.summary.warnings %}
         <h3>OCR warnings</h3>
         <div class="flags">
@@ -36,38 +37,56 @@
         {% endfor %}
         </div>
       {% endif %}
+
       <h3>Sub-packets</h3>
       <div class="subpackets">
       {% for sp in job.summary.sub_packets %}
         <div class="subpacket">
-          <strong>#{{ sp.index }} · WO {{ sp.wo or "unknown" }}</strong>
-          <span>{{ sp.customer or "Unknown customer" }} · {{ sp.product or "Unknown product" }}</span>
-          <small>PO {{ sp.po or "unknown" }} · {{ sp.cases or "?" }} cases · {{ sp.total_lbs or "?" }} lbs</small>
+          <strong>#{{ sp.index }} &middot; WO {{ sp.wo or "unknown" }}</strong>
+          <span>{{ sp.customer or "Unknown customer" }} &middot; {{ sp.product or "Unknown product" }}</span>
+          <small>PO {{ sp.po or "unknown" }} &middot; {{ sp.cases or "?" }} cases &middot; {{ sp.total_lbs or "?" }} lbs</small>
         </div>
       {% endfor %}
       </div>
-      {% if job.summary.failures %}
-        <h3>Flags</h3>
-        <div class="flags">
-        {% for flag in job.summary.failures %}
-          {% if flag.pages %}
-          <button
-            type="button"
-            class="flag flag-button"
-            data-flag-name="{{ flag.name }}"
-            data-flag-detail="{{ flag.detail }}"
-            data-flag-pages='{{ flag.pages|tojson }}'
-          >
-            <strong>{{ flag.name }}</strong>
-            <span>{{ flag.detail }}</span>
-            {% if flag.pages %}<small>Pages: {{ flag.pages|join(", ") }} · Click to review</small>{% endif %}
-          </button>
-          {% else %}
-          <div class="flag">
-            <strong>{{ flag.name }}</strong>
-            <span>{{ flag.detail }}</span>
-          </div>
-          {% endif %}
+
+      {% if job.summary.issues %}
+        <h3 id="review-queue">Review queue</h3>
+        <div class="issue-list">
+        {% for issue in job.summary.issues %}
+          <article class="issue-card {{ issue.check_status }}">
+            <div class="issue-card__main">
+              <div class="issue-card__meta">
+                <span>{{ issue.id }}</span>
+                <span>{{ issue.severity }}</span>
+                <span>{{ issue.issue_type }}</span>
+                <span>{{ issue.status }}</span>
+              </div>
+              <strong>{{ issue.name }}</strong>
+              <span>{{ issue.detail }}</span>
+              {% if issue.pages %}<small>Pages: {{ issue.pages|join(", ") }}</small>{% endif %}
+              {% if issue.comment %}<small>Reviewer comment: {{ issue.comment }}</small>{% endif %}
+            </div>
+            <div class="issue-card__actions">
+              {% if issue.pages %}
+              <button
+                type="button"
+                class="secondary small issue-open"
+                data-flag-name="{{ issue.name }}"
+                data-flag-detail="{{ issue.detail }}"
+                data-flag-pages='{{ issue.pages|tojson }}'
+              >View pages</button>
+              {% endif %}
+              <form action="/jobs/{{ job.id }}/issues/{{ issue.id }}" method="post" class="issue-review-form">
+                <select name="status" aria-label="Issue status">
+                  {% for option in ["Open", "Needs Review", "Corrected", "Accepted as Is", "False Positive", "Resolved"] %}
+                    <option value="{{ option }}" {% if issue.status == option %}selected{% endif %}>{{ option }}</option>
+                  {% endfor %}
+                </select>
+                <input name="comment" value="{{ issue.comment or '' }}" placeholder="Reviewer comment">
+                <button type="submit" class="small">Save</button>
+              </form>
+            </div>
+          </article>
         {% endfor %}
         </div>
       {% endif %}
@@ -104,9 +123,67 @@
       {% endfor %}
       {% if not files %}<p class="empty">Files appear here when the run completes.</p>{% endif %}
     </div>
+
     <form action="/jobs/{{ job.id }}/rerun" method="post">
       <button type="submit" class="secondary">Re-run packet</button>
     </form>
+
+    <h3 id="review-signoff">Reviewer sign-off</h3>
+    {% if job.review_signoff %}
+      <div class="signoff-card">
+        <strong>{{ job.review_signoff.decision }}</strong>
+        <span>{{ job.review_signoff.reviewer_name }}</span>
+        <small>{{ job.review_signoff.signed_at }}</small>
+        {% if job.review_signoff.comments %}<small>{{ job.review_signoff.comments }}</small>{% endif %}
+      </div>
+    {% endif %}
+    <form action="/jobs/{{ job.id }}/signoff" method="post" class="replace-page-form">
+      <label>Reviewer name
+        <input name="reviewer_name" value="{{ job.review_signoff.reviewer_name if job.review_signoff else '' }}" required>
+      </label>
+      <label>Decision
+        <select name="decision">
+          {% for option in ["Approved", "Approved with exceptions", "Rejected", "Needs correction"] %}
+            <option value="{{ option }}" {% if job.review_signoff and job.review_signoff.decision == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Comments
+        <input name="comments" value="{{ job.review_signoff.comments if job.review_signoff else '' }}" placeholder="Optional review note">
+      </label>
+      <button type="submit" class="secondary">Save sign-off</button>
+    </form>
+
+    <h3>Replace corrected page</h3>
+    <form action="/jobs/{{ job.id }}/replace-page" method="post" enctype="multipart/form-data" class="replace-page-form">
+      <label>Page number
+        <input name="page_no" type="number" min="1" required>
+      </label>
+      <label>Corrected page PDF
+        <input name="replacement_pdf" type="file" accept="application/pdf" required>
+      </label>
+      <button type="submit" class="secondary">Replace page &amp; re-run</button>
+    </form>
+
+    {% if job.audit_trail %}
+      <h3>Audit trail</h3>
+      <div class="audit-list">
+        {% for event in job.audit_trail[-6:]|reverse %}
+          <div>
+            <strong>{{ event.action }}</strong>
+            <small>{{ event.at }} &middot; {{ event.detail }}</small>
+            {% if event.action == "page_replaced" %}
+              <button
+                type="button"
+                class="secondary small compare-open"
+                data-event-id="{{ event.id }}"
+                data-page-no="{{ event.page_no }}"
+              >Compare page</button>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
   </aside>
 </section>
 
@@ -115,15 +192,39 @@
   <section class="page-viewer__panel" role="dialog" aria-modal="true" aria-labelledby="viewerTitle">
     <div class="page-viewer__head">
       <div>
-        <p class="eyebrow">Flag review</p>
+        <p class="eyebrow">Issue review</p>
         <h2 id="viewerTitle">Page review</h2>
         <p id="viewerDetail"></p>
       </div>
-      <button type="button" class="icon-button" data-close-viewer aria-label="Close page viewer">×</button>
+      <button type="button" class="icon-button" data-close-viewer aria-label="Close page viewer">x</button>
     </div>
     <div id="viewerPages" class="page-tabs"></div>
     <div class="page-viewer__body">
       <img id="viewerImage" alt="Flagged packet page">
+    </div>
+  </section>
+</div>
+
+<div id="compareViewer" class="page-viewer" hidden>
+  <div class="page-viewer__backdrop" data-close-compare></div>
+  <section class="page-viewer__panel compare-viewer__panel" role="dialog" aria-modal="true" aria-labelledby="compareTitle">
+    <div class="page-viewer__head">
+      <div>
+        <p class="eyebrow">Correction review</p>
+        <h2 id="compareTitle">Page comparison</h2>
+        <p id="compareDetail"></p>
+      </div>
+      <button type="button" class="icon-button" data-close-compare aria-label="Close comparison">x</button>
+    </div>
+    <div class="compare-grid">
+      <figure>
+        <figcaption>Before</figcaption>
+        <img id="compareBefore" alt="Before corrected page">
+      </figure>
+      <figure>
+        <figcaption>Replacement</figcaption>
+        <img id="compareAfter" alt="Replacement page">
+      </figure>
     </div>
   </section>
 </div>
@@ -139,7 +240,7 @@
       </div>
       <div class="viewer-actions">
         <a id="fileViewerDownload" class="download-action" href="#">Download</a>
-        <button type="button" class="icon-button" data-close-file-viewer aria-label="Close file viewer">×</button>
+        <button type="button" class="icon-button" data-close-file-viewer aria-label="Close file viewer">x</button>
       </div>
     </div>
     <div id="fileViewerBody" class="file-viewer__body"></div>
@@ -178,7 +279,7 @@ function showFlagPage(flagName, flagDetail, pages) {
   });
 }
 
-document.querySelectorAll(".flag-button").forEach((button) => {
+document.querySelectorAll(".issue-open").forEach((button) => {
   button.addEventListener("click", () => {
     const pages = JSON.parse(button.dataset.flagPages || "[]");
     showFlagPage(button.dataset.flagName, button.dataset.flagDetail, pages);
@@ -204,6 +305,10 @@ const fileViewerTitle = document.getElementById("fileViewerTitle");
 const fileViewerName = document.getElementById("fileViewerName");
 const fileViewerBody = document.getElementById("fileViewerBody");
 const fileViewerDownload = document.getElementById("fileViewerDownload");
+const compareViewer = document.getElementById("compareViewer");
+const compareDetail = document.getElementById("compareDetail");
+const compareBefore = document.getElementById("compareBefore");
+const compareAfter = document.getElementById("compareAfter");
 
 function showFilePreview(card) {
   const label = card.dataset.fileLabel;
@@ -255,12 +360,8 @@ function showFilePreview(card) {
   fileViewerBody.appendChild(pre);
   fetch(previewUrl)
     .then((res) => res.text())
-    .then((text) => {
-      pre.textContent = text.slice(0, 120000);
-    })
-    .catch((error) => {
-      pre.textContent = `Could not load preview: ${error}`;
-    });
+    .then((text) => { pre.textContent = text.slice(0, 120000); })
+    .catch((error) => { pre.textContent = `Could not load preview: ${error}`; });
 }
 
 function renderTablePreview(url) {
@@ -282,7 +383,6 @@ function renderTablePreview(url) {
         note.textContent = "Preview is limited to the first rows/columns. Download for the full file.";
         shell.appendChild(note);
       }
-
       const tabs = document.createElement("div");
       tabs.className = "page-tabs table-preview__tabs";
       const tableWrap = document.createElement("div");
@@ -294,11 +394,9 @@ function renderTablePreview(url) {
         tabs.querySelectorAll("button").forEach((button) => button.classList.remove("active"));
         activeButton.classList.add("active");
         tableWrap.innerHTML = "";
-
         const table = document.createElement("table");
         const body = document.createElement("tbody");
-        const rows = sheet.rows || [];
-        rows.forEach((row, rowIndex) => {
+        (sheet.rows || []).forEach((row, rowIndex) => {
           const tr = document.createElement("tr");
           const cellTag = rowIndex === 0 ? "th" : "td";
           row.forEach((cell) => {
@@ -325,9 +423,7 @@ function renderTablePreview(url) {
         shell.textContent = "No rows found in this file.";
       }
     })
-    .catch((error) => {
-      shell.textContent = `Could not load table preview: ${error}`;
-    });
+    .catch((error) => { shell.textContent = `Could not load table preview: ${error}`; });
 }
 
 document.querySelectorAll(".download-card").forEach((card) => {
@@ -354,6 +450,33 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !fileViewer.hidden) {
     fileViewer.hidden = true;
     fileViewerBody.innerHTML = "";
+  }
+});
+
+document.querySelectorAll(".compare-open").forEach((button) => {
+  button.addEventListener("click", () => {
+    const eventId = button.dataset.eventId;
+    const pageNo = button.dataset.pageNo;
+    compareViewer.hidden = false;
+    compareDetail.textContent = `Page ${pageNo}`;
+    compareBefore.src = `/jobs/${activeJobId}/compare/${eventId}/before.png`;
+    compareAfter.src = `/jobs/${activeJobId}/compare/${eventId}/after.png`;
+  });
+});
+
+document.querySelectorAll("[data-close-compare]").forEach((button) => {
+  button.addEventListener("click", () => {
+    compareViewer.hidden = true;
+    compareBefore.removeAttribute("src");
+    compareAfter.removeAttribute("src");
+  });
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !compareViewer.hidden) {
+    compareViewer.hidden = true;
+    compareBefore.removeAttribute("src");
+    compareAfter.removeAttribute("src");
   }
 });
 </script>

@@ -139,7 +139,7 @@ button.secondary { background: var(--ink); margin-top: 18px; }
 }
 .metrics strong { font-size: 24px; }
 .metrics small { color: var(--muted); font-weight: 700; }
-.subpackets, .flags, .downloads { display: grid; gap: 10px; }
+.subpackets, .flags, .downloads, .issue-list, .audit-list { display: grid; gap: 10px; }
 .subpacket, .flag, .download-card {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -148,6 +148,68 @@ button.secondary { background: var(--ink); margin-top: 18px; }
   gap: 4px;
 }
 .flag { border-left: 4px solid var(--warn); }
+.issue-card {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--warn);
+  border-radius: 8px;
+  padding: 13px;
+  display: grid;
+  gap: 12px;
+  background: #fff;
+}
+.issue-card.fail { border-left-color: var(--bad); }
+.issue-card.info { border-left-color: var(--blue); }
+.issue-card__main { display: grid; gap: 5px; min-width: 0; }
+.issue-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.issue-card__meta span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.issue-card__actions {
+  display: grid;
+  gap: 8px;
+}
+.issue-review-form {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+button.small,
+.small {
+  width: auto;
+  min-height: 34px;
+  padding: 8px 11px;
+  font-size: 13px;
+}
+.replace-page-form {
+  display: grid;
+  gap: 10px;
+}
+.signoff-card {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--ok);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 3px;
+  margin-bottom: 10px;
+}
+.audit-list div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  gap: 3px;
+}
 .flag-button {
   width: 100%;
   text-align: left;
@@ -376,13 +438,91 @@ button.secondary { background: var(--ink); margin-top: 18px; }
   font-weight: 900;
 }
 .table-preview tr:hover td { background: #fff8f9; }
+.compare-viewer__panel {
+  width: min(1320px, 100%);
+}
+.compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  overflow: auto;
+  background: #f4f7fb;
+  padding: 18px;
+}
+.compare-grid figure {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.compare-grid figcaption {
+  color: var(--muted);
+  font-weight: 850;
+}
+.compare-grid img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 22px;
+}
+.settings-nav {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+.settings-nav a {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-weight: 800;
+}
+.settings-nav a.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+.config-form {
+  display: grid;
+  gap: 12px;
+}
+.config-form textarea {
+  width: 100%;
+  min-height: 68vh;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  color: var(--ink);
+  background: #fbfcfe;
+}
+.notice {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 13px 15px;
+  margin-bottom: 18px;
+  font-weight: 800;
+}
+.notice.ok {
+  border-left: 4px solid var(--ok);
+  background: #f0fbf5;
+}
+.notice.bad {
+  border-left: 4px solid var(--bad);
+  background: #fff3f2;
+}
 @media (max-width: 820px) {
   .topbar, .title-row { align-items: flex-start; flex-direction: column; }
   main { padding: 20px; }
-  .hero, .grid { grid-template-columns: 1fr; }
+  .hero, .grid, .settings-grid, .compare-grid { grid-template-columns: 1fr; }
   h1 { font-size: 30px; }
   .job-row { grid-template-columns: 1fr; }
   .metrics { grid-template-columns: repeat(2, 1fr); }
+  .issue-review-form { grid-template-columns: 1fr; }
   .page-viewer { padding: 10px; }
   .page-viewer__head { flex-direction: column; }
 }

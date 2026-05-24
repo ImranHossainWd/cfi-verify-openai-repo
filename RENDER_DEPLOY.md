@@ -21,7 +21,8 @@ OPENAI_API_KEY=your_api_key
 OPENAI_MODEL=gpt-5.4-mini
 OPENAI_REASONING_EFFORT=none
 FULL_PACKET_FIELD_DISCOVERY=true
-SQR_DATA_DIR=/tmp/sqr-verifier
+SQR_DATA_DIR=/var/data/sqr-verifier
+SQR_CONFIG_DIR=/var/data/sqr-verifier/config
 MAX_UPLOAD_MB=150
 ```
 
@@ -43,6 +44,8 @@ VISION_PROVIDER=mock
 Uploaded packets and generated artifacts are stored at `/tmp/sqr-verifier`. This is ephemeral storage: files can disappear when Render restarts or redeploys the service. Production should move to a paid Render disk, S3-compatible storage, or a database-backed artifact store.
 
 Packet field discovery: with `FULL_PACKET_FIELD_DISCOVERY=true`, GPT-5.4 Mini reads every page so each packet's unique fields can be discovered before the cross-reference matrix is built. Packet-specific values returned under `all_fields` are flattened into first-class matrix rows automatically. To reduce OpenAI usage later, set `FULL_PACKET_FIELD_DISCOVERY=false`; then printed forms are handled by Tesseract first and vision is reserved for low-text pages, high-marking pages, and handwriting-heavy form types configured in `sqr_verifier_v2/config/rules.yaml`.
+
+Persistent storage: the Blueprint attaches a 10 GB Render disk at `/var/data/sqr-verifier`. Only files under that path survive deploys/restarts, so keep `SQR_DATA_DIR` and `SQR_CONFIG_DIR` pointed there on the Standard instance.
 
 ## Local Run
 

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+import yaml
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.responses import JSONResponse
@@ -37,14 +38,15 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-05-24-note-resolution-aliases"
+APP_VERSION = "2026-05-24-production-workflow"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
 UPLOAD_DIR = DATA_DIR / "uploads"
 OUTPUT_DIR = DATA_DIR / "outputs"
 JOBS_FILE = DATA_DIR / "jobs.json"
-CONFIG_DIR = Path(os.environ.get("SQR_CONFIG_DIR", ROOT / "config")).resolve()
+BUNDLED_CONFIG_DIR = ROOT / "config"
+CONFIG_DIR = Path(os.environ.get("SQR_CONFIG_DIR", DATA_DIR / "config")).resolve()
 VISION_CACHE = Path(os.environ.get("VISION_CACHE_PATH", ROOT / "cache" / "vision_cache.json")).resolve()
 DEFAULT_VISION_PROVIDER = os.environ.get("VISION_PROVIDER", "openai").strip().lower() or "openai"
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
@@ -57,9 +59,18 @@ FULL_PACKET_FIELD_DISCOVERY = os.environ.get("FULL_PACKET_FIELD_DISCOVERY", "").
 }
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "150"))
 PROVIDERS = ["openai", "anthropic", "mock"]
+CONFIG_EDITABLE_FILES = {
+    "rules": "rules.yaml",
+    "customers": "customers.yaml",
+    "specs": "specs.yaml",
+}
 
-for directory in (DATA_DIR, UPLOAD_DIR, OUTPUT_DIR):
+for directory in (DATA_DIR, UPLOAD_DIR, OUTPUT_DIR, CONFIG_DIR):
     directory.mkdir(parents=True, exist_ok=True)
+for bundled_file in BUNDLED_CONFIG_DIR.glob("*.yaml"):
+    runtime_file = CONFIG_DIR / bundled_file.name
+    if not runtime_file.exists():
+        shutil.copy2(bundled_file, runtime_file)
 
 app = FastAPI(title=APP_NAME)
 app.mount("/static", StaticFiles(directory=ROOT / "app" / "static"), name="static")
@@ -111,7 +122,136 @@ def update_job(job_id: str, **changes: Any) -> Dict[str, Any]:
         return job
 
 
+def audit_event(job: Dict[str, Any], action: str, detail: str, **extra: Any) -> Dict[str, Any]:
+    events = list(job.get("audit_trail") or [])
+    event = {
+        "id": f"AUD-{len(events) + 1:04d}",
+        "at": utc_now(),
+        "user": "local-reviewer",
+        "action": action,
+        "detail": detail,
+    }
+    event.update(extra)
+    events.append(event)
+    job["audit_trail"] = events
+    return job
+
+
+def config_file_path(config_name: str) -> Path:
+    filename = CONFIG_EDITABLE_FILES.get(config_name)
+    if not filename:
+        raise HTTPException(status_code=404, detail="Config file not found")
+    path = (CONFIG_DIR / filename).resolve()
+    if CONFIG_DIR not in path.parents or not path.exists():
+        raise HTTPException(status_code=404, detail="Config file not found")
+    return path
+
+
+def load_config_panels(selected: str = "rules", message: str = "", error: str = "") -> Dict[str, Any]:
+    panels = []
+    for key, filename in CONFIG_EDITABLE_FILES.items():
+        path = config_file_path(key)
+        panels.append(
+            {
+                "key": key,
+                "filename": filename,
+                "selected": key == selected,
+                "content": path.read_text(encoding="utf-8"),
+            }
+        )
+    return {
+        "panels": panels,
+        "selected": selected if selected in CONFIG_EDITABLE_FILES else "rules",
+        "message": message,
+        "error": error,
+    }
+
+
+def issue_type(name: str, detail: str) -> str:
+    text = f"{name} {detail}".lower()
+    if "required form" in text or "present" in text and "not detected" in text:
+        return "Missing Document"
+    if "field coverage" in text or "not detected" in text:
+        return "Missing Field"
+    if "cross-page" in text or "≠" in text or "disagrees" in text:
+        return "Mismatch"
+    if "weight calc" in text or "case count" in text or "total" in text:
+        return "Math Error"
+    if "signature" in text or "initial" in text:
+        return "Missing Initials/Signature"
+    if "spec" in text or "outside" in text:
+        return "Out of Spec"
+    if "defect" in text or "photo" in text or "evidence" in text:
+        return "Missing Evidence"
+    if "metal" in text:
+        return "Metal Detector"
+    return "Review"
+
+
+def render_pdf_page_to_png(pdf_path: Path, page_index: int, output_path: Path) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.exists():
+        return output_path
+    try:
+        import fitz
+
+        with fitz.open(str(pdf_path)) as doc:
+            if page_index < 0 or page_index >= doc.page_count:
+                raise HTTPException(status_code=404, detail="PDF page not found")
+            page = doc.load_page(page_index)
+            pix = page.get_pixmap(matrix=fitz.Matrix(1.7, 1.7), alpha=False)
+            pix.save(str(output_path))
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Could not render comparison page: {exc}") from exc
+    return output_path
+
+
+def build_issues(report: Any, existing_reviews: Optional[Dict[str, Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    reviews = existing_reviews or {}
+    issues: List[Dict[str, Any]] = []
+    for idx, check in enumerate([c for c in report.all_checks if c.status != "pass"], start=1):
+        stable_key = "|".join(
+            [
+                check.status,
+                str(None if check.sub_packet is None else check.sub_packet + 1),
+                check.name,
+                check.detail,
+                ",".join(map(str, check.pages or [])),
+            ]
+        )
+        review = reviews.get(stable_key, {})
+        severity = "High" if check.status == "fail" else "Low"
+        issues.append(
+            {
+                "id": f"ISS-{idx:03d}",
+                "key": stable_key,
+                "severity": severity,
+                "status": review.get("status", "Open" if check.status == "fail" else "Needs Review"),
+                "issue_type": issue_type(check.name, check.detail),
+                "check_status": check.status,
+                "name": check.name,
+                "detail": check.detail,
+                "pages": check.pages,
+                "sub_packet": None if check.sub_packet is None else check.sub_packet + 1,
+                "comment": review.get("comment", ""),
+                "updated_at": review.get("updated_at"),
+            }
+        )
+    return issues
+
+
+def merge_issue_reviews(summary: Dict[str, Any], reviews: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
+    review_map = reviews or {}
+    for issue in summary.get("issues", []):
+        if issue["key"] in review_map:
+            issue.update({k: v for k, v in review_map[issue["key"]].items() if k in {"status", "comment", "updated_at"}})
+    return summary
+
+
 def summarize_report(report: Any) -> Dict[str, Any]:
+    issues = build_issues(report)
     return {
         "overall": report.overall,
         "pass_count": report.n_pass,
@@ -141,6 +281,7 @@ def summarize_report(report: Any) -> Dict[str, Any]:
             for c in report.all_checks
             if c.status == "fail"
         ],
+        "issues": issues,
         "warnings": [],
     }
 
@@ -277,6 +418,7 @@ def run_verification(job_id: str) -> None:
         ]
         n_vision = sum(1 for page in report.pages if page.ocr_backend_used == "vision")
         summary = summarize_report(report)
+        summary = merge_issue_reviews(summary, job.get("issue_reviews"))
         warnings = []
         if provider in {"anthropic", "openai"} and vision_errors:
             warnings.append(
@@ -319,6 +461,53 @@ async def index(request: Request) -> HTMLResponse:
             "default_provider": DEFAULT_VISION_PROVIDER,
             "providers": PROVIDERS,
             "max_upload_mb": MAX_UPLOAD_MB,
+        },
+    )
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings(request: Request, selected: str = "rules") -> HTMLResponse:
+    return templates.TemplateResponse(
+        "settings.html",
+        {
+            "request": request,
+            "app_name": APP_NAME,
+            **load_config_panels(selected=selected),
+        },
+    )
+
+
+@app.post("/settings/{config_name}", response_class=HTMLResponse)
+async def save_settings(
+    request: Request,
+    config_name: str,
+    content: str = Form(...),
+) -> HTMLResponse:
+    path = config_file_path(config_name)
+    try:
+        yaml.safe_load(content) or {}
+    except yaml.YAMLError as exc:
+        return templates.TemplateResponse(
+            "settings.html",
+            {
+                "request": request,
+                "app_name": APP_NAME,
+                **load_config_panels(
+                    selected=config_name,
+                    error=f"{path.name} was not saved because the YAML is invalid: {exc}",
+                ),
+            },
+            status_code=400,
+        )
+    backup = path.with_suffix(path.suffix + f".{utc_now().replace(':', '-')}.bak")
+    shutil.copy2(path, backup)
+    path.write_text(content, encoding="utf-8")
+    return templates.TemplateResponse(
+        "settings.html",
+        {
+            "request": request,
+            "app_name": APP_NAME,
+            **load_config_panels(selected=config_name, message=f"Saved {path.name}; backup created as {backup.name}."),
         },
     )
 
@@ -389,6 +578,83 @@ async def job_status(job_id: str) -> Dict[str, Any]:
     return {**job, "files": output_files(job)}
 
 
+@app.post("/jobs/{job_id}/issues/{issue_id}")
+async def update_issue_review(
+    job_id: str,
+    issue_id: str,
+    status: str = Form(...),
+    comment: str = Form(""),
+) -> RedirectResponse:
+    allowed = {"Open", "Needs Review", "Corrected", "Accepted as Is", "False Positive", "Resolved"}
+    if status not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported issue status.")
+    with jobs_lock:
+        jobs = load_jobs()
+        job = jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        summary = job.get("summary") or {}
+        issue = next((item for item in summary.get("issues", []) if item.get("id") == issue_id), None)
+        if not issue:
+            raise HTTPException(status_code=404, detail="Issue not found")
+        reviews = dict(job.get("issue_reviews") or {})
+        reviews[issue["key"]] = {
+            "status": status,
+            "comment": comment.strip(),
+            "updated_at": utc_now(),
+        }
+        job["issue_reviews"] = reviews
+        issue.update(reviews[issue["key"]])
+        audit_event(
+            job,
+            "issue_review",
+            f"{issue_id} marked {status}",
+            issue_id=issue_id,
+            issue_type=issue.get("issue_type"),
+            pages=issue.get("pages", []),
+            comment=comment.strip(),
+        )
+        job["updated_at"] = utc_now()
+        jobs[job_id] = job
+        save_jobs(jobs)
+    return RedirectResponse(url=f"/jobs/{job_id}#review-queue", status_code=303)
+
+
+@app.post("/jobs/{job_id}/signoff")
+async def save_signoff(
+    job_id: str,
+    reviewer_name: str = Form(...),
+    decision: str = Form(...),
+    comments: str = Form(""),
+) -> RedirectResponse:
+    allowed = {"Approved", "Approved with exceptions", "Rejected", "Needs correction"}
+    if decision not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported sign-off decision.")
+    with jobs_lock:
+        jobs = load_jobs()
+        job = jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        signoff = {
+            "reviewer_name": reviewer_name.strip(),
+            "decision": decision,
+            "comments": comments.strip(),
+            "signed_at": utc_now(),
+        }
+        job["review_signoff"] = signoff
+        audit_event(
+            job,
+            "review_signoff",
+            f"{reviewer_name.strip()} signed: {decision}",
+            decision=decision,
+            comments=comments.strip(),
+        )
+        job["updated_at"] = utc_now()
+        jobs[job_id] = job
+        save_jobs(jobs)
+    return RedirectResponse(url=f"/jobs/{job_id}#review-signoff", status_code=303)
+
+
 @app.get("/jobs/{job_id}/download/{filename}")
 async def download(job_id: str, filename: str) -> FileResponse:
     job = get_job(job_id)
@@ -428,6 +694,30 @@ async def page_image(job_id: str, page_no: int) -> FileResponse:
     return FileResponse(path, media_type="image/png")
 
 
+@app.get("/jobs/{job_id}/compare/{event_id}/{side}.png")
+async def compare_page(job_id: str, event_id: str, side: str) -> FileResponse:
+    if side not in {"before", "after"}:
+        raise HTTPException(status_code=404, detail="Comparison side not found")
+    job = get_job(job_id)
+    event = next((item for item in job.get("audit_trail") or [] if item.get("id") == event_id), None)
+    if not event or event.get("action") != "page_replaced":
+        raise HTTPException(status_code=404, detail="Replacement event not found")
+    page_no = int(event.get("page_no") or 1)
+    out_dir = Path(job["output_dir"]).resolve()
+    compare_dir = out_dir / "versions" / "compare" / event_id
+    if side == "before":
+        pdf_path = Path(event.get("backup_pdf", "")).resolve()
+        page_index = page_no - 1
+    else:
+        pdf_path = Path(event.get("replacement_pdf", "")).resolve()
+        page_index = 0
+    versions_dir = (out_dir / "versions").resolve()
+    if versions_dir not in pdf_path.parents or not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="Comparison PDF not found")
+    image_path = render_pdf_page_to_png(pdf_path, page_index, compare_dir / f"{side}.png")
+    return FileResponse(image_path, media_type="image/png")
+
+
 @app.post("/jobs/{job_id}/rerun")
 async def rerun_job(background_tasks: BackgroundTasks, job_id: str) -> RedirectResponse:
     job = get_job(job_id)
@@ -440,9 +730,88 @@ async def rerun_job(background_tasks: BackgroundTasks, job_id: str) -> RedirectR
     return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
 
 
+@app.post("/jobs/{job_id}/replace-page")
+async def replace_page(
+    background_tasks: BackgroundTasks,
+    job_id: str,
+    page_no: int = Form(...),
+    replacement_pdf: UploadFile = File(...),
+) -> RedirectResponse:
+    if page_no < 1:
+        raise HTTPException(status_code=400, detail="Page number must be 1 or greater.")
+    if not replacement_pdf.filename or not replacement_pdf.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Upload a PDF replacement page.")
+    job = get_job(job_id)
+    out_dir = Path(job["output_dir"])
+    versions_dir = out_dir / "versions"
+    versions_dir.mkdir(parents=True, exist_ok=True)
+    stamp = utc_now().replace(":", "-")
+    replacement_path = versions_dir / f"{stamp}_replacement_p{page_no:02d}_{slugify(replacement_pdf.filename)}.pdf"
+
+    size = 0
+    with replacement_path.open("wb") as out:
+        while chunk := await replacement_pdf.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_UPLOAD_MB * 1024 * 1024:
+                replacement_path.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail=f"Replacement PDF exceeds {MAX_UPLOAD_MB} MB.")
+            out.write(chunk)
+
+    try:
+        from pypdf import PdfReader, PdfWriter
+
+        source = PdfReader(job["input_path"])
+        replacement = PdfReader(str(replacement_path))
+        if page_no > len(source.pages):
+            raise HTTPException(status_code=400, detail=f"Packet only has {len(source.pages)} pages.")
+        if len(replacement.pages) < 1:
+            raise HTTPException(status_code=400, detail="Replacement PDF has no pages.")
+        previous_input = Path(job["input_path"])
+        backup_input = versions_dir / f"{stamp}_before_replace_p{page_no:02d}_{previous_input.name}"
+        shutil.copy2(previous_input, backup_input)
+        writer = PdfWriter()
+        for i, page in enumerate(source.pages, start=1):
+            writer.add_page(replacement.pages[0] if i == page_no else page)
+        new_input = UPLOAD_DIR / f"{job_id}_{job['packet_name']}_page-{page_no:02d}-replaced.pdf"
+        with new_input.open("wb") as f:
+            writer.write(f)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Could not replace page: {exc}") from exc
+
+    for child in list(out_dir.iterdir()):
+        if child.name == "versions":
+            continue
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink(missing_ok=True)
+
+    job = update_job(
+        job_id,
+        input_path=str(new_input),
+        status="queued",
+        message=f"Page {page_no} replaced; queued for re-run",
+        summary=None,
+    )
+    audit_event(
+        job,
+        "page_replaced",
+        f"Page {page_no} replaced and queued for verification",
+        page_no=page_no,
+        backup_pdf=str(backup_input),
+        replacement_pdf=str(replacement_path),
+        new_packet_pdf=str(new_input),
+    )
+    update_job(job_id, audit_trail=job.get("audit_trail"))
+    background_tasks.add_task(run_verification, job_id)
+    return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+
+
 @app.get("/healthz")
 async def healthz() -> Dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "app_version": APP_VERSION}
 
 
 @app.get("/diagnostics")
@@ -465,6 +834,7 @@ async def diagnostics() -> Dict[str, Any]:
         "css_size": css_path.stat().st_size if css_path.exists() else 0,
         "data_dir": str(DATA_DIR),
         "config_dir": str(CONFIG_DIR),
+        "bundled_config_dir": str(BUNDLED_CONFIG_DIR),
     }
 
 

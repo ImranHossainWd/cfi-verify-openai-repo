@@ -6,6 +6,10 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /healthz
+    disk:
+      name: sqr-verifier-data
+      mountPath: /var/data/sqr-verifier
+      sizeGB: 10
     envVars:
       - key: VISION_PROVIDER
         value: openai
@@ -18,4 +22,6 @@ services:
       - key: MAX_UPLOAD_MB
         value: "150"
       - key: SQR_DATA_DIR
-        value: /tmp/sqr-verifier
+        value: /var/data/sqr-verifier
+      - key: SQR_CONFIG_DIR
+        value: /var/data/sqr-verifier/config

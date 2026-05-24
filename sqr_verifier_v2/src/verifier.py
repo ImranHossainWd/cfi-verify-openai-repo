@@ -1907,6 +1907,27 @@ def assemble_pdf(report: PacketReport, summary_image_path: Path,
     pages_imgs[0].save(out_pdf, save_all=True, append_images=pages_imgs[1:])
 
 
+def add_pdf_bookmarks(report: PacketReport, pdf_path: Path) -> None:
+    """Add audit-friendly bookmarks to the final generated PDF."""
+    try:
+        from pypdf import PdfReader, PdfWriter
+
+        reader = PdfReader(str(pdf_path))
+        writer = PdfWriter()
+        for page in reader.pages:
+            writer.add_page(page)
+        writer.add_outline_item("Verification Summary", 0)
+        for rec in report.pages:
+            label = rec.form_label or rec.form_code or f"Page {rec.page_no}"
+            writer.add_outline_item(f"p{rec.page_no} - {label}"[:120], rec.page_no)
+        tmp = pdf_path.with_suffix(".bookmarked.tmp.pdf")
+        with tmp.open("wb") as f:
+            writer.write(f)
+        tmp.replace(pdf_path)
+    except Exception as exc:  # noqa: BLE001
+        print(f"  Bookmark generation skipped: {exc}")
+
+
 # =============================================================================
 # Reports (CSV + JSON)
 # =============================================================================
@@ -2291,6 +2312,7 @@ def verify_pdf(pdf_path: str, out_dir: str,
     build_summary_image(report, summary_p)
     pdf_out = out / f"{name}_AI_VERIFIED.pdf"
     assemble_pdf(report, summary_p, annotated_dir, pdf_out)
+    add_pdf_bookmarks(report, pdf_out)
     write_issues_csv(report, out / f"{name}_issues.csv")
     write_trace_json(report, out / f"{name}_trace.json")
     # Cross-reference matrix is produced as part of the cross_reference_matrix rule
