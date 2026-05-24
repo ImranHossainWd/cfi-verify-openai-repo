@@ -82,7 +82,23 @@
     </div>
     <div id="downloads" class="downloads">
       {% for file in files %}
-        <a href="{{ file.url }}">{{ file.label }}<small>{{ file.filename }}</small></a>
+        <div
+          role="button"
+          tabindex="0"
+          class="download-card"
+          data-file-label="{{ file.label }}"
+          data-file-name="{{ file.filename }}"
+          data-file-extension="{{ file.extension }}"
+          data-preview-url="{{ file.preview_url }}"
+          data-download-url="{{ file.download_url }}"
+          data-previewable="{{ 'true' if file.previewable else 'false' }}"
+        >
+          <span>
+            {{ file.label }}
+            <small>{{ file.filename }}</small>
+          </span>
+          <a class="download-action" href="{{ file.download_url }}" aria-label="Download {{ file.label }}">Download</a>
+        </div>
       {% endfor %}
       {% if not files %}<p class="empty">Files appear here when the run completes.</p>{% endif %}
     </div>
@@ -107,6 +123,24 @@
     <div class="page-viewer__body">
       <img id="viewerImage" alt="Flagged packet page">
     </div>
+  </section>
+</div>
+
+<div id="fileViewer" class="page-viewer" hidden>
+  <div class="page-viewer__backdrop" data-close-file-viewer></div>
+  <section class="page-viewer__panel file-viewer__panel" role="dialog" aria-modal="true" aria-labelledby="fileViewerTitle">
+    <div class="page-viewer__head">
+      <div>
+        <p class="eyebrow">Output preview</p>
+        <h2 id="fileViewerTitle">File preview</h2>
+        <p id="fileViewerName"></p>
+      </div>
+      <div class="viewer-actions">
+        <a id="fileViewerDownload" class="download-action" href="#">Download</a>
+        <button type="button" class="icon-button" data-close-file-viewer aria-label="Close file viewer">×</button>
+      </div>
+    </div>
+    <div id="fileViewerBody" class="file-viewer__body"></div>
   </section>
 </div>
 
@@ -160,6 +194,90 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !viewer.hidden) {
     viewer.hidden = true;
     viewerImage.removeAttribute("src");
+  }
+});
+
+const fileViewer = document.getElementById("fileViewer");
+const fileViewerTitle = document.getElementById("fileViewerTitle");
+const fileViewerName = document.getElementById("fileViewerName");
+const fileViewerBody = document.getElementById("fileViewerBody");
+const fileViewerDownload = document.getElementById("fileViewerDownload");
+
+function showFilePreview(card) {
+  const label = card.dataset.fileLabel;
+  const fileName = card.dataset.fileName;
+  const extension = card.dataset.fileExtension;
+  const previewUrl = card.dataset.previewUrl;
+  const downloadUrl = card.dataset.downloadUrl;
+  const previewable = card.dataset.previewable === "true";
+
+  fileViewer.hidden = false;
+  fileViewerTitle.textContent = label;
+  fileViewerName.textContent = fileName;
+  fileViewerDownload.href = downloadUrl;
+  fileViewerBody.innerHTML = "";
+
+  if (!previewable) {
+    const message = document.createElement("div");
+    message.className = "empty file-preview-empty";
+    message.textContent = "This file type cannot be previewed directly in the dashboard. Use Download to open it.";
+    fileViewerBody.appendChild(message);
+    return;
+  }
+
+  if (extension === "png") {
+    const img = document.createElement("img");
+    img.src = previewUrl;
+    img.alt = fileName;
+    fileViewerBody.appendChild(img);
+    return;
+  }
+
+  if (extension === "pdf") {
+    const iframe = document.createElement("iframe");
+    iframe.src = previewUrl;
+    iframe.title = fileName;
+    fileViewerBody.appendChild(iframe);
+    return;
+  }
+
+  const pre = document.createElement("pre");
+  pre.textContent = "Loading preview...";
+  fileViewerBody.appendChild(pre);
+  fetch(previewUrl)
+    .then((res) => res.text())
+    .then((text) => {
+      pre.textContent = text.slice(0, 120000);
+    })
+    .catch((error) => {
+      pre.textContent = `Could not load preview: ${error}`;
+    });
+}
+
+document.querySelectorAll(".download-card").forEach((card) => {
+  card.addEventListener("click", () => showFilePreview(card));
+  card.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      showFilePreview(card);
+    }
+  });
+  card.querySelector(".download-action").addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+});
+
+document.querySelectorAll("[data-close-file-viewer]").forEach((button) => {
+  button.addEventListener("click", () => {
+    fileViewer.hidden = true;
+    fileViewerBody.innerHTML = "";
+  });
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !fileViewer.hidden) {
+    fileViewer.hidden = true;
+    fileViewerBody.innerHTML = "";
   }
 });
 </script>

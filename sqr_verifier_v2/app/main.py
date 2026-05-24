@@ -141,7 +141,7 @@ def summarize_report(report: Any) -> Dict[str, Any]:
     }
 
 
-def output_files(job: Dict[str, Any]) -> List[Dict[str, str]]:
+def output_files(job: Dict[str, Any]) -> List[Dict[str, Any]]:
     out_dir = Path(job["output_dir"])
     packet_name = job["packet_name"]
     candidates = [
@@ -152,10 +152,26 @@ def output_files(job: Dict[str, Any]) -> List[Dict[str, str]]:
         ("Summary PNG", out_dir / f"{packet_name}_summary.png"),
     ]
     return [
-        {"label": label, "filename": path.name, "url": f"/jobs/{job['id']}/download/{path.name}"}
+        {
+            "label": label,
+            "filename": path.name,
+            "url": f"/jobs/{job['id']}/download/{path.name}",
+            "download_url": f"/jobs/{job['id']}/download/{path.name}",
+            "preview_url": f"/jobs/{job['id']}/view/{path.name}",
+            "extension": path.suffix.lower().lstrip("."),
+            "previewable": path.suffix.lower() in {".pdf", ".png", ".csv", ".json"},
+        }
         for label, path in candidates
         if path.exists()
     ]
+
+
+def output_file_path(job: Dict[str, Any], filename: str) -> Path:
+    out_dir = Path(job["output_dir"]).resolve()
+    path = (out_dir / filename).resolve()
+    if out_dir not in path.parents or not path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return path
 
 
 def page_image_path(job: Dict[str, Any], page_no: int) -> Path:
@@ -314,11 +330,26 @@ async def job_status(job_id: str) -> Dict[str, Any]:
 @app.get("/jobs/{job_id}/download/{filename}")
 async def download(job_id: str, filename: str) -> FileResponse:
     job = get_job(job_id)
-    out_dir = Path(job["output_dir"]).resolve()
-    path = (out_dir / filename).resolve()
-    if out_dir not in path.parents or not path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+    path = output_file_path(job, filename)
     return FileResponse(path, filename=filename)
+
+
+@app.get("/jobs/{job_id}/view/{filename}")
+async def view_file(job_id: str, filename: str) -> FileResponse:
+    job = get_job(job_id)
+    path = output_file_path(job, filename)
+    media_types = {
+        ".pdf": "application/pdf",
+        ".png": "image/png",
+        ".csv": "text/csv; charset=utf-8",
+        ".json": "application/json; charset=utf-8",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+    return FileResponse(
+        path,
+        media_type=media_types.get(path.suffix.lower(), "application/octet-stream"),
+        headers={"Content-Disposition": f'inline; filename="{path.name}"'},
+    )
 
 
 @app.get("/jobs/{job_id}/page/{page_no}.png")
