@@ -19,11 +19,10 @@
       <span id="message">{{ job.message }}</span>
     </div>
     {% if job.summary %}
-      <div class="metrics">
+      <div class="metrics metrics--three">
         <div><strong>{{ job.summary.overall }}</strong><small>Overall</small></div>
         <div><strong>{{ job.summary.pass_count }}</strong><small>Pass</small></div>
         <div><strong>{{ job.summary.fail_count }}</strong><small>Flags</small></div>
-        <div><strong>{{ job.summary.info_count }}</strong><small>Notes</small></div>
       </div>
 
       {% if job.summary.warnings %}
@@ -78,7 +77,7 @@
               {% endif %}
               <form action="/jobs/{{ job.id }}/issues/{{ issue.id }}" method="post" class="issue-review-form">
                 <select name="status" aria-label="Issue status">
-                  {% for option in ["Open", "Needs Review", "Corrected", "Accepted as Is", "False Positive", "Resolved"] %}
+                  {% for option in ["Open", "Corrected", "Accepted as Is", "False Positive", "Resolved"] %}
                     <option value="{{ option }}" {% if issue.status == option %}selected{% endif %}>{{ option }}</option>
                   {% endfor %}
                 </select>
@@ -89,6 +88,8 @@
           </article>
         {% endfor %}
         </div>
+      {% else %}
+        <p class="empty">No flags found.</p>
       {% endif %}
     {% else %}
       <p class="empty">This job is {{ job.status }}. The page will refresh while it runs.</p>

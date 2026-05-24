@@ -1772,6 +1772,7 @@ def annotate_page_image(rec: PageRecord, page_checks: List[CheckResult],
               f"Page {rec.page_no} — {rec.form_label}{backend_tag}",
               fill=(0, 0, 0), font=font)
     tally = f"AI: {pass_n} matched ✓     {fail_n} flag(s)     {info_n} note(s)"
+    tally = f"AI: {pass_n} matched     {fail_n} flag(s)"
     draw.text((24, 70), tally, fill=(0, 0, 0), font=med)
 
     # Thin separator line
@@ -1810,6 +1811,7 @@ def annotate_page_image(rec: PageRecord, page_checks: List[CheckResult],
     draw.line([(0, panel_y - 2), (NW, panel_y - 2)], fill=(0, 0, 0), width=2)
     draw.text((24, panel_y + 10), "AI checks on this page:", fill=(0, 0, 0), font=med)
     y = panel_y + 50
+    page_checks = [c for c in page_checks if c.status != "info"]
     for c in page_checks[:30]:
         if c.status == "pass":
             mark, color = "✓", AI_PASS_COLOR
@@ -1870,6 +1872,8 @@ def build_summary_image(report: PacketReport, out_path: Path,
     draw.text((80, y), f"✗ {report.n_fail} flag(s) raised", fill=AI_FLAG_COLOR, font=bd); y += 50
     draw.text((80, y), f"ⓘ {report.n_info} informational note(s)", fill=AI_INFO_COLOR, font=bd); y += 70
 
+    draw.rectangle([(70, y - 70), (900, y - 20)], fill="white")
+    y -= 70
     fails = [c for c in report.all_checks if c.status == "fail"]
     if fails:
         draw.text((60, y), "Issues to review:", fill=AI_FLAG_COLOR, font=h1); y += 60
@@ -1892,6 +1896,11 @@ def build_summary_image(report: PacketReport, out_path: Path,
               fill=(80,80,80), font=rg)
     draw.text((60, H - 100),
               "AI marks: GREEN ✓ matched   ORANGE ✗ flag for review   BLUE ⓘ note   "
+              "Pale yellow = AI-reconciled total. Distinct from human reviewer's red/yellow pen.",
+              fill=(80,80,80), font=rg)
+    draw.rectangle([(50, H - 120), (W - 50, H - 55)], fill="white")
+    draw.text((60, H - 100),
+              "AI marks: GREEN matched   ORANGE flag for review   "
               "Pale yellow = AI-reconciled total. Distinct from human reviewer's red/yellow pen.",
               fill=(80,80,80), font=rg)
     im.save(out_path)
@@ -1942,12 +1951,6 @@ def write_issues_csv(report: PacketReport, out_csv: Path) -> None:
             if c.status == "fail":
                 sp = (c.sub_packet + 1) if c.sub_packet is not None else ""
                 w.writerow([idx, "FLAG", sp, c.name, c.detail,
-                            ", ".join(map(str, c.pages)), ""])
-                idx += 1
-        for c in report.all_checks:
-            if c.status == "info":
-                sp = (c.sub_packet + 1) if c.sub_packet is not None else ""
-                w.writerow([idx, "NOTE", sp, c.name, c.detail,
                             ", ".join(map(str, c.pages)), ""])
                 idx += 1
 
@@ -2115,7 +2118,7 @@ def write_cross_reference_matrix(report: PacketReport, out_xlsx: Path) -> None:
 
     rr = 2
     page_form = {p.page_no: p.form_label for p in pages}
-    all_checks = report.all_checks
+    all_checks = [c for c in report.all_checks if c.status != "info"]
     for c in all_checks:
         ws3.cell(rr, 1, f"#{c.sub_packet+1}" if c.sub_packet is not None else "PKT")
         ws3.cell(rr, 2, ", ".join(map(str, c.pages)) if c.pages else "")
@@ -2139,7 +2142,7 @@ def write_trace_json(report: PacketReport, out_json: Path) -> None:
     data = {
         "packet_name": report.packet_name,
         "overall": report.overall,
-        "tally": {"pass": report.n_pass, "fail": report.n_fail, "info": report.n_info},
+        "tally": {"pass": report.n_pass, "fail": report.n_fail},
         "sub_packets": [
             {
                 "index": sp.index,
@@ -2149,11 +2152,11 @@ def write_trace_json(report: PacketReport, out_json: Path) -> None:
                 "primary_product": sp.primary_product,
                 "page_range": [sp.pages[0].page_no, sp.pages[-1].page_no] if sp.pages else None,
                 "cases": sp.cases,
-                "checks": [asdict(c) for c in sp.checks],
+                "checks": [asdict(c) for c in sp.checks if c.status != "info"],
             }
             for sp in report.sub_packets
         ],
-        "packet_level_checks": [asdict(c) for c in report.packet_level_checks],
+        "packet_level_checks": [asdict(c) for c in report.packet_level_checks if c.status != "info"],
         "pages": [
             {
                 "page_no": p.page_no,
@@ -2164,7 +2167,6 @@ def write_trace_json(report: PacketReport, out_json: Path) -> None:
                 "red_pct":    p.red_pct,
                 "is_photo":   p.is_likely_photo,
                 "fields":     p.fields,
-                "notes":      p.notes,
             }
             for p in report.pages
         ],

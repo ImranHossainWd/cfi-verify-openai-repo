@@ -38,7 +38,7 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-05-24-production-workflow"
+APP_VERSION = "2026-05-24-flags-only-workflow"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
@@ -120,6 +120,22 @@ def update_job(job_id: str, **changes: Any) -> Dict[str, Any]:
         jobs[job_id] = job
         save_jobs(jobs)
         return job
+
+
+def flags_only_summary(summary: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not summary:
+        return summary
+    clean = dict(summary)
+    clean["info_count"] = 0
+    clean["issues"] = [item for item in clean.get("issues", []) if item.get("check_status") == "fail"]
+    clean["failures"] = [item for item in clean.get("failures", [])]
+    return clean
+
+
+def public_job(job: Dict[str, Any]) -> Dict[str, Any]:
+    clean = dict(job)
+    clean["summary"] = flags_only_summary(clean.get("summary"))
+    return clean
 
 
 def audit_event(job: Dict[str, Any], action: str, detail: str, **extra: Any) -> Dict[str, Any]:
@@ -211,7 +227,7 @@ def render_pdf_page_to_png(pdf_path: Path, page_index: int, output_path: Path) -
 def build_issues(report: Any, existing_reviews: Optional[Dict[str, Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     reviews = existing_reviews or {}
     issues: List[Dict[str, Any]] = []
-    for idx, check in enumerate([c for c in report.all_checks if c.status != "pass"], start=1):
+    for idx, check in enumerate([c for c in report.all_checks if c.status == "fail"], start=1):
         stable_key = "|".join(
             [
                 check.status,
@@ -222,13 +238,13 @@ def build_issues(report: Any, existing_reviews: Optional[Dict[str, Dict[str, Any
             ]
         )
         review = reviews.get(stable_key, {})
-        severity = "High" if check.status == "fail" else "Low"
+        severity = "High"
         issues.append(
             {
                 "id": f"ISS-{idx:03d}",
                 "key": stable_key,
                 "severity": severity,
-                "status": review.get("status", "Open" if check.status == "fail" else "Needs Review"),
+                "status": review.get("status", "Open"),
                 "issue_type": issue_type(check.name, check.detail),
                 "check_status": check.status,
                 "name": check.name,
@@ -256,7 +272,7 @@ def summarize_report(report: Any) -> Dict[str, Any]:
         "overall": report.overall,
         "pass_count": report.n_pass,
         "fail_count": report.n_fail,
-        "info_count": report.n_info,
+        "info_count": 0,
         "page_count": len(report.pages),
         "sub_packet_count": len(report.sub_packets),
         "sub_packets": [
@@ -451,7 +467,7 @@ def run_verification(job_id: str) -> None:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
-    jobs = sorted(load_jobs().values(), key=lambda j: j.get("created_at", ""), reverse=True)
+    jobs = sorted([public_job(j) for j in load_jobs().values()], key=lambda j: j.get("created_at", ""), reverse=True)
     return templates.TemplateResponse(
         "index.html",
         {
@@ -560,7 +576,7 @@ async def create_job(
 
 @app.get("/jobs/{job_id}", response_class=HTMLResponse)
 async def job_detail(request: Request, job_id: str) -> HTMLResponse:
-    job = get_job(job_id)
+    job = public_job(get_job(job_id))
     return templates.TemplateResponse(
         "job.html",
         {
@@ -574,7 +590,7 @@ async def job_detail(request: Request, job_id: str) -> HTMLResponse:
 
 @app.get("/api/jobs/{job_id}")
 async def job_status(job_id: str) -> Dict[str, Any]:
-    job = get_job(job_id)
+    job = public_job(get_job(job_id))
     return {**job, "files": output_files(job)}
 
 
@@ -585,7 +601,7 @@ async def update_issue_review(
     status: str = Form(...),
     comment: str = Form(""),
 ) -> RedirectResponse:
-    allowed = {"Open", "Needs Review", "Corrected", "Accepted as Is", "False Positive", "Resolved"}
+    allowed = {"Open", "Corrected", "Accepted as Is", "False Positive", "Resolved"}
     if status not in allowed:
         raise HTTPException(status_code=400, detail="Unsupported issue status.")
     with jobs_lock:

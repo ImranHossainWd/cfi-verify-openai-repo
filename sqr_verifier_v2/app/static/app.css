@@ -130,6 +130,7 @@ button.secondary { background: var(--ink); margin-top: 18px; }
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
 }
+.metrics--three { grid-template-columns: repeat(3, 1fr); }
 .metrics div {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -521,7 +522,7 @@ button.small,
   .hero, .grid, .settings-grid, .compare-grid { grid-template-columns: 1fr; }
   h1 { font-size: 30px; }
   .job-row { grid-template-columns: 1fr; }
-  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .metrics, .metrics--three { grid-template-columns: repeat(2, 1fr); }
   .issue-review-form { grid-template-columns: 1fr; }
   .page-viewer { padding: 10px; }
   .page-viewer__head { flex-direction: column; }

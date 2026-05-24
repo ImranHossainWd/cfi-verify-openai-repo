@@ -43,7 +43,7 @@
         </span>
         {% if job.summary %}
           <span class="score {{ job.summary.overall|lower }}">{{ job.summary.overall }}</span>
-          <span class="counts">{{ job.summary.pass_count }} pass · {{ job.summary.fail_count }} flags · {{ job.summary.info_count }} notes</span>
+          <span class="counts">{{ job.summary.pass_count }} pass · {{ job.summary.fail_count }} flags</span>
         {% else %}
           <span class="counts">{{ job.message }}</span>
         {% endif %}
