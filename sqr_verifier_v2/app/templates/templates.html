@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="detail">
+  <p class="eyebrow">Visual rule builder</p>
+  <h1>Form templates</h1>
+  <p>Add or edit expected fields for a form type. New packet-specific fields are still auto-discovered even if they are not listed here.</p>
+</section>
+
+<section class="grid">
+  <article class="panel">
+    <h2>Add / update template</h2>
+    <form action="/templates" method="post" class="mobile-form">
+      <label>Form code <input name="code" placeholder="COA, SQR_XC, NEW_FORM" required></label>
+      <label>Display label <input name="label" placeholder="Certificate of Analysis"></label>
+      <label>Expected fields
+        <textarea name="fields" placeholder="wo, po, customer, product, dates"></textarea>
+      </label>
+      <label>Active
+        <select name="active">
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+      </label>
+      <button type="submit">Save template</button>
+    </form>
+  </article>
+
+  <aside class="panel">
+    <h2>Current templates</h2>
+    <div class="audit-list">
+    {% for item in templates %}
+      <div>
+        <strong>{{ item.code }} &middot; {{ item.label }}</strong>
+        <small>{{ item.fields|join(", ") }}</small>
+      </div>
+    {% endfor %}
+    </div>
+  </aside>
+</section>
+{% endblock %}

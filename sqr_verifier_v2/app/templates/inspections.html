@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="detail">
+  <p class="eyebrow">Mobile-friendly entry</p>
+  <h1>Live inspections</h1>
+  <p>Use this page from a phone or tablet for non-packet checks during daily operations.</p>
+</section>
+
+<section class="grid">
+  <article class="panel">
+    <h2>New inspection</h2>
+    <form action="/inspections" method="post" class="mobile-form">
+      <label>Inspection type
+        <select name="inspection_type">
+          <option>Trailer/Cargo</option>
+          <option>Metal detector</option>
+          <option>Forklift</option>
+          <option>First aid</option>
+          <option>Sanitation</option>
+          <option>Corrective action follow-up</option>
+        </select>
+      </label>
+      <label>Inspector <input name="inspector"></label>
+      <label>Area <input name="area" placeholder="Receiving, line 2, warehouse"></label>
+      <label>Date <input name="date" type="date"></label>
+      <label>Result
+        <select name="result">
+          <option>Pass</option>
+          <option>Needs correction</option>
+          <option>Fail</option>
+        </select>
+      </label>
+      <label>Observations <textarea name="observations"></textarea></label>
+      <label>Corrective action <textarea name="corrective_action"></textarea></label>
+      <button type="submit">Save inspection</button>
+    </form>
+  </article>
+
+  <aside class="panel">
+    <h2>Recent entries</h2>
+    <div class="audit-list">
+    {% for item in inspections %}
+      <div>
+        <strong>{{ item.inspection_type }} &middot; {{ item.result }}</strong>
+        <small>{{ item.date or item.created_at }} &middot; {{ item.inspector }} &middot; {{ item.area }}</small>
+        {% if item.corrective_action %}<small>{{ item.corrective_action }}</small>{% endif %}
+      </div>
+    {% else %}
+      <p class="empty">No live inspections yet.</p>
+    {% endfor %}
+    </div>
+  </aside>
+</section>
+{% endblock %}

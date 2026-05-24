@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="detail">
+  <p class="eyebrow">Monthly / SQF prep</p>
+  <h1>Audit prep</h1>
+  <p>{{ jobs|length }} recent packets &middot; {{ inspections|length }} live inspections &middot; {{ open_issues }} open flags</p>
+</section>
+
+<section class="grid">
+  <article class="panel">
+    <h2>Generate monthly workbook</h2>
+    <form action="/audit/generate" method="post" class="mobile-form">
+      <label>Month
+        <input name="month" type="month">
+      </label>
+      <button type="submit">Generate audit workbook</button>
+    </form>
+
+    <h3>Recent packets</h3>
+    <div class="job-list">
+      {% for job in jobs[:12] %}
+        <a class="job-row compact" href="/jobs/{{ job.id }}">
+          <span class="status {{ job.status }}">{{ job.status }}</span>
+          <span class="job-main"><strong>{{ job.packet_name }}</strong><small>{{ job.created_at }}</small></span>
+          {% if job.summary %}<span class="counts">{{ job.summary.fail_count }} flags</span>{% endif %}
+        </a>
+      {% endfor %}
+    </div>
+  </article>
+
+  <aside class="panel">
+    <h2>SQF open items</h2>
+    <p class="empty">The generated workbook includes packet summary, live inspections, and unresolved flags for audit follow-up.</p>
+  </aside>
+</section>
+{% endblock %}

@@ -38,13 +38,17 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-05-24-flags-only-workflow"
+APP_VERSION = "2026-05-24-ops-workflow"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
 UPLOAD_DIR = DATA_DIR / "uploads"
 OUTPUT_DIR = DATA_DIR / "outputs"
 JOBS_FILE = DATA_DIR / "jobs.json"
+INSPECTIONS_FILE = DATA_DIR / "inspections.json"
+BOARD_FILE = DATA_DIR / "issue_board.json"
+TEMPLATES_FILE = DATA_DIR / "form_templates.json"
+MONTHLY_DIR = DATA_DIR / "monthly"
 BUNDLED_CONFIG_DIR = ROOT / "config"
 CONFIG_DIR = Path(os.environ.get("SQR_CONFIG_DIR", DATA_DIR / "config")).resolve()
 VISION_CACHE = Path(os.environ.get("VISION_CACHE_PATH", ROOT / "cache" / "vision_cache.json")).resolve()
@@ -65,7 +69,7 @@ CONFIG_EDITABLE_FILES = {
     "specs": "specs.yaml",
 }
 
-for directory in (DATA_DIR, UPLOAD_DIR, OUTPUT_DIR, CONFIG_DIR):
+for directory in (DATA_DIR, UPLOAD_DIR, OUTPUT_DIR, CONFIG_DIR, MONTHLY_DIR):
     directory.mkdir(parents=True, exist_ok=True)
 for bundled_file in BUNDLED_CONFIG_DIR.glob("*.yaml"):
     runtime_file = CONFIG_DIR / bundled_file.name
@@ -97,6 +101,22 @@ def load_jobs() -> Dict[str, Dict[str, Any]]:
         return {}
 
 
+def load_json_file(path: Path, default: Any) -> Any:
+    if not path.exists():
+        return default
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return default
+
+
+def save_json_file(path: Path, data: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.replace(path)
+
+
 def save_jobs(jobs: Dict[str, Dict[str, Any]]) -> None:
     tmp = JOBS_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(jobs, indent=2, sort_keys=True), encoding="utf-8")
@@ -119,7 +139,11 @@ def update_job(job_id: str, **changes: Any) -> Dict[str, Any]:
         job["updated_at"] = utc_now()
         jobs[job_id] = job
         save_jobs(jobs)
-        return job
+    return job
+
+
+def issue_key(job_id: str, issue: Dict[str, Any]) -> str:
+    return f"{job_id}:{issue.get('key') or issue.get('id')}"
 
 
 def flags_only_summary(summary: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -132,9 +156,22 @@ def flags_only_summary(summary: Optional[Dict[str, Any]]) -> Optional[Dict[str, 
     return clean
 
 
+def apply_board_review(job: Dict[str, Any]) -> Dict[str, Any]:
+    board = load_json_file(BOARD_FILE, {})
+    summary = job.get("summary") or {}
+    for issue in summary.get("issues", []):
+        state = board.get(issue_key(job["id"], issue), {})
+        if state:
+            issue.update({k: v for k, v in state.items() if k in {
+                "status", "comment", "assignee", "due_date", "priority", "updated_at"
+            }})
+    return job
+
+
 def public_job(job: Dict[str, Any]) -> Dict[str, Any]:
     clean = dict(job)
     clean["summary"] = flags_only_summary(clean.get("summary"))
+    clean = apply_board_review(clean)
     return clean
 
 
@@ -181,6 +218,106 @@ def load_config_panels(selected: str = "rules", message: str = "", error: str = 
         "message": message,
         "error": error,
     }
+
+
+def rules_config() -> Dict[str, Any]:
+    return yaml.safe_load(config_file_path("rules").read_text(encoding="utf-8")) or {}
+
+
+def save_rules_config(data: Dict[str, Any]) -> None:
+    path = config_file_path("rules")
+    backup = path.with_suffix(path.suffix + f".{utc_now().replace(':', '-')}.bak")
+    shutil.copy2(path, backup)
+    path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+
+
+def get_form_templates() -> Dict[str, Dict[str, Any]]:
+    custom = load_json_file(TEMPLATES_FILE, {})
+    data = rules_config()
+    expected = (
+        data.get("rules", {})
+        .get("field_coverage_audit", {})
+        .get("expected_fields_by_form", {})
+        or {}
+    )
+    templates = {}
+    for code, fields in expected.items():
+        templates[code] = {
+            "code": code,
+            "label": custom.get(code, {}).get("label", _human_form_label(code)),
+            "fields": list(fields or []),
+            "active": custom.get(code, {}).get("active", True),
+        }
+    for code, item in custom.items():
+        templates.setdefault(
+            code,
+            {
+                "code": code,
+                "label": item.get("label", _human_form_label(code)),
+                "fields": item.get("fields", []),
+                "active": item.get("active", True),
+            },
+        )
+    return dict(sorted(templates.items()))
+
+
+def _human_form_label(code: str) -> str:
+    return code.replace("_", " ").title()
+
+
+def save_form_template(code: str, label: str, fields_text: str, active: bool) -> None:
+    clean_code = re.sub(r"[^A-Za-z0-9_]+", "_", code.strip().upper()).strip("_")
+    if not clean_code:
+        raise HTTPException(status_code=400, detail="Form code is required.")
+    fields = [re.sub(r"[^A-Za-z0-9_]+", "_", item.strip().lower()).strip("_")
+              for item in re.split(r"[,\n]+", fields_text)]
+    fields = [item for item in fields if item]
+    templates = get_form_templates()
+    templates[clean_code] = {
+        "code": clean_code,
+        "label": label.strip() or _human_form_label(clean_code),
+        "fields": fields,
+        "active": active,
+    }
+    save_json_file(TEMPLATES_FILE, templates)
+    data = rules_config()
+    coverage = data.setdefault("rules", {}).setdefault("field_coverage_audit", {})
+    expected = coverage.setdefault("expected_fields_by_form", {})
+    expected[clean_code] = fields
+    save_rules_config(data)
+
+
+def issue_board_items() -> List[Dict[str, Any]]:
+    board = load_json_file(BOARD_FILE, {})
+    items: List[Dict[str, Any]] = []
+    for job in sorted([public_job(j) for j in load_jobs().values()], key=lambda j: j.get("created_at", ""), reverse=True):
+        summary = job.get("summary") or {}
+        for issue in summary.get("issues", []):
+            key = issue_key(job["id"], issue)
+            state = board.get(key, {})
+            items.append({
+                "board_key": key,
+                "job_id": job["id"],
+                "packet_name": job.get("packet_name"),
+                "created_at": job.get("created_at"),
+                **issue,
+                **state,
+                "history": state.get("history", []),
+            })
+    return items
+
+
+def issue_counts(items: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = {"open": 0, "corrected": 0, "resolved": 0, "total": len(items)}
+    for item in items:
+        status = (item.get("status") or "Open").lower()
+        if status == "corrected":
+            counts["corrected"] += 1
+        elif status in {"resolved", "accepted as is", "false positive"}:
+            counts["resolved"] += 1
+        else:
+            counts["open"] += 1
+    return counts
 
 
 def issue_type(name: str, detail: str) -> str:
@@ -409,6 +546,97 @@ def preview_table_file(path: Path) -> Dict[str, Any]:
     raise HTTPException(status_code=415, detail="Table preview is only available for CSV and XLSX files")
 
 
+def read_trace(job: Dict[str, Any]) -> Dict[str, Any]:
+    trace_path = Path(job["output_dir"]) / f"{job['packet_name']}_trace.json"
+    if not trace_path.exists():
+        return {}
+    return load_json_file(trace_path, {})
+
+
+def field_confidence_rows(job: Dict[str, Any]) -> List[Dict[str, Any]]:
+    trace = read_trace(job)
+    rows: List[Dict[str, Any]] = []
+    for page in trace.get("pages", []) or []:
+        fields = page.get("fields", {}) or {}
+        confidence = float(page.get("confidence_estimate") or fields.get("_page_confidence") or 0)
+        field_conf = fields.get("_field_confidence") or {}
+        for key, value in fields.items():
+            if key.startswith("_") or value in (None, "", [], {}):
+                continue
+            if isinstance(value, (list, dict)):
+                continue
+            rows.append({
+                "page_no": page.get("page_no"),
+                "form": page.get("form_label") or page.get("form_code"),
+                "field": key,
+                "value": value,
+                "confidence": round(float(field_conf.get(key, confidence) or confidence), 3),
+                "backend": page.get("ocr_backend_used"),
+            })
+    return rows
+
+
+def write_audit_workbook(path: Path, month: str, jobs: List[Dict[str, Any]], inspections: List[Dict[str, Any]]) -> None:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Packet Summary"
+    headers = ["Packet", "Uploaded", "Status", "Overall", "Flags", "Open flags", "Signed by", "Decision"]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill("solid", start_color="FFEAEAEA")
+    for job in jobs:
+        summary = job.get("summary") or {}
+        issues = summary.get("issues") or []
+        open_flags = sum(1 for item in issues if (item.get("status") or "Open") == "Open")
+        signoff = job.get("review_signoff") or {}
+        ws.append([
+            job.get("packet_name"),
+            job.get("created_at"),
+            job.get("status"),
+            summary.get("overall", ""),
+            summary.get("fail_count", 0),
+            open_flags,
+            signoff.get("reviewer_name", ""),
+            signoff.get("decision", ""),
+        ])
+    ws2 = wb.create_sheet("Live Inspections")
+    ws2.append(["Date", "Type", "Inspector", "Area", "Result", "Corrective action"])
+    for cell in ws2[1]:
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill("solid", start_color="FFEAEAEA")
+    for item in inspections:
+        ws2.append([
+            item.get("date"),
+            item.get("inspection_type"),
+            item.get("inspector"),
+            item.get("area"),
+            item.get("result"),
+            item.get("corrective_action"),
+        ])
+    ws3 = wb.create_sheet("SQF Open Items")
+    ws3.append(["Packet", "Flag", "Assignee", "Due date", "Status", "Detail"])
+    for cell in ws3[1]:
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill("solid", start_color="FFEAEAEA")
+    for item in issue_board_items():
+        if (item.get("status") or "Open") in {"Resolved", "Accepted as Is", "False Positive"}:
+            continue
+        ws3.append([
+            item.get("packet_name"),
+            item.get("name"),
+            item.get("assignee", ""),
+            item.get("due_date", ""),
+            item.get("status", "Open"),
+            item.get("detail"),
+        ])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(path)
+
+
 def run_verification(job_id: str) -> None:
     job = update_job(job_id, status="running", started_at=utc_now(), message="Rendering and OCR are in progress")
     try:
@@ -491,6 +719,144 @@ async def settings(request: Request, selected: str = "rules") -> HTMLResponse:
             **load_config_panels(selected=selected),
         },
     )
+
+
+@app.get("/issues", response_class=HTMLResponse)
+async def issue_board(request: Request) -> HTMLResponse:
+    items = issue_board_items()
+    return templates.TemplateResponse(
+        "issues.html",
+        {
+            "request": request,
+            "app_name": APP_NAME,
+            "issues": items,
+            "counts": issue_counts(items),
+        },
+    )
+
+
+@app.post("/issues/update")
+async def update_issue_board(
+    board_key: str = Form(...),
+    status: str = Form("Open"),
+    assignee: str = Form(""),
+    due_date: str = Form(""),
+    priority: str = Form("Normal"),
+    comment: str = Form(""),
+) -> RedirectResponse:
+    allowed = {"Open", "Corrected", "Accepted as Is", "False Positive", "Resolved"}
+    if status not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported issue status.")
+    board = load_json_file(BOARD_FILE, {})
+    current = board.get(board_key, {})
+    history = list(current.get("history") or [])
+    history.append({
+        "at": utc_now(),
+        "status": status,
+        "assignee": assignee.strip(),
+        "due_date": due_date.strip(),
+        "priority": priority.strip(),
+        "comment": comment.strip(),
+    })
+    board[board_key] = {
+        "status": status,
+        "assignee": assignee.strip(),
+        "due_date": due_date.strip(),
+        "priority": priority.strip() or "Normal",
+        "comment": comment.strip(),
+        "updated_at": utc_now(),
+        "history": history[-25:],
+    }
+    save_json_file(BOARD_FILE, board)
+    return RedirectResponse(url="/issues", status_code=303)
+
+
+@app.get("/inspections", response_class=HTMLResponse)
+async def inspections(request: Request) -> HTMLResponse:
+    items = sorted(load_json_file(INSPECTIONS_FILE, []), key=lambda x: x.get("created_at", ""), reverse=True)
+    return templates.TemplateResponse(
+        "inspections.html",
+        {"request": request, "app_name": APP_NAME, "inspections": items},
+    )
+
+
+@app.post("/inspections")
+async def create_inspection(
+    inspection_type: str = Form(...),
+    inspector: str = Form(""),
+    area: str = Form(""),
+    date: str = Form(""),
+    result: str = Form("Pass"),
+    observations: str = Form(""),
+    corrective_action: str = Form(""),
+) -> RedirectResponse:
+    items = load_json_file(INSPECTIONS_FILE, [])
+    items.append({
+        "id": uuid4().hex[:10],
+        "created_at": utc_now(),
+        "inspection_type": inspection_type.strip(),
+        "inspector": inspector.strip(),
+        "area": area.strip(),
+        "date": date.strip(),
+        "result": result,
+        "observations": observations.strip(),
+        "corrective_action": corrective_action.strip(),
+    })
+    save_json_file(INSPECTIONS_FILE, items)
+    return RedirectResponse(url="/inspections", status_code=303)
+
+
+@app.get("/templates", response_class=HTMLResponse)
+async def form_templates(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        "templates.html",
+        {"request": request, "app_name": APP_NAME, "templates": get_form_templates().values()},
+    )
+
+
+@app.post("/templates")
+async def save_template(
+    code: str = Form(...),
+    label: str = Form(""),
+    fields: str = Form(""),
+    active: str = Form("true"),
+) -> RedirectResponse:
+    save_form_template(code, label, fields, active == "true")
+    return RedirectResponse(url="/templates", status_code=303)
+
+
+@app.get("/audit", response_class=HTMLResponse)
+async def audit_prep(request: Request) -> HTMLResponse:
+    jobs = sorted([public_job(j) for j in load_jobs().values()], key=lambda j: j.get("created_at", ""), reverse=True)
+    inspections_data = sorted(load_json_file(INSPECTIONS_FILE, []), key=lambda x: x.get("created_at", ""), reverse=True)
+    return templates.TemplateResponse(
+        "audit.html",
+        {
+            "request": request,
+            "app_name": APP_NAME,
+            "jobs": jobs[:100],
+            "inspections": inspections_data[:100],
+            "open_issues": issue_counts(issue_board_items())["open"],
+        },
+    )
+
+
+@app.post("/audit/generate")
+async def generate_audit(month: str = Form("")) -> RedirectResponse:
+    month_key = month.strip() or datetime.now(timezone.utc).strftime("%Y-%m")
+    jobs = [public_job(j) for j in load_jobs().values() if str(j.get("created_at", "")).startswith(month_key)]
+    inspections_data = [i for i in load_json_file(INSPECTIONS_FILE, []) if str(i.get("date") or i.get("created_at", "")).startswith(month_key)]
+    out = MONTHLY_DIR / f"california-fruit-audit-prep-{slugify(month_key)}.xlsx"
+    write_audit_workbook(out, month_key, jobs, inspections_data)
+    return RedirectResponse(url=f"/audit/download/{out.name}", status_code=303)
+
+
+@app.get("/audit/download/{filename}")
+async def download_audit(filename: str) -> FileResponse:
+    path = (MONTHLY_DIR / filename).resolve()
+    if MONTHLY_DIR.resolve() not in path.parents or not path.exists():
+        raise HTTPException(status_code=404, detail="Audit file not found")
+    return FileResponse(path, filename=path.name)
 
 
 @app.post("/settings/{config_name}", response_class=HTMLResponse)
@@ -584,6 +950,20 @@ async def job_detail(request: Request, job_id: str) -> HTMLResponse:
             "job": job,
             "files": output_files(job),
             "app_name": APP_NAME,
+        },
+    )
+
+
+@app.get("/jobs/{job_id}/fields", response_class=HTMLResponse)
+async def job_fields(request: Request, job_id: str) -> HTMLResponse:
+    job = public_job(get_job(job_id))
+    return templates.TemplateResponse(
+        "fields.html",
+        {
+            "request": request,
+            "app_name": APP_NAME,
+            "job": job,
+            "fields": field_confidence_rows(job),
         },
     )
 

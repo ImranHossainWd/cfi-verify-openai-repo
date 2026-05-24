@@ -79,6 +79,18 @@ button {
   cursor: pointer;
 }
 button.secondary { background: var(--ink); margin-top: 18px; }
+.secondary-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 42px;
+  margin-top: 10px;
+  border-radius: 7px;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 850;
+}
 .panel { padding: 22px; }
 .panel-head {
   display: flex;
@@ -183,6 +195,24 @@ button.secondary { background: var(--ink); margin-top: 18px; }
   grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
+}
+.board-form {
+  display: grid;
+  grid-template-columns: 150px minmax(120px, 1fr) 150px 120px minmax(160px, 1.2fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.mobile-form {
+  display: grid;
+  gap: 12px;
+}
+.mobile-form textarea {
+  min-height: 110px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 12px 13px;
+  font: inherit;
+  resize: vertical;
 }
 button.small,
 .small {
@@ -439,6 +469,33 @@ button.small,
   font-weight: 900;
 }
 .table-preview tr:hover td { background: #fff8f9; }
+.confidence-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+.confidence-table th,
+.confidence-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 9px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.confidence-pill {
+  display: inline-flex;
+  min-width: 52px;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-weight: 850;
+  background: #e7f8ee;
+  color: var(--ok);
+}
+.confidence-pill.mid { background: #fff7e8; color: var(--warn); }
+.confidence-pill.low { background: #ffeae8; color: var(--bad); }
+.job-row.compact {
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+}
 .compare-viewer__panel {
   width: min(1320px, 100%);
 }
@@ -523,7 +580,7 @@ button.small,
   h1 { font-size: 30px; }
   .job-row { grid-template-columns: 1fr; }
   .metrics, .metrics--three { grid-template-columns: repeat(2, 1fr); }
-  .issue-review-form { grid-template-columns: 1fr; }
+  .issue-review-form, .board-form { grid-template-columns: 1fr; }
   .page-viewer { padding: 10px; }
   .page-viewer__head { flex-direction: column; }
 }

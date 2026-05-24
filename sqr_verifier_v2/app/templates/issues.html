@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="detail">
+  <p class="eyebrow">Correction workflow</p>
+  <h1>Issue board</h1>
+  <p>{{ counts.open }} open &middot; {{ counts.corrected }} corrected &middot; {{ counts.resolved }} resolved &middot; {{ counts.total }} total flags</p>
+</section>
+
+<section class="panel">
+  {% if issues %}
+    <div class="issue-list">
+    {% for issue in issues %}
+      <article class="issue-card {{ issue.check_status }}">
+        <div class="issue-card__main">
+          <div class="issue-card__meta">
+            <span>{{ issue.status or "Open" }}</span>
+            <span>{{ issue.priority or "Normal" }}</span>
+            <span>{{ issue.issue_type }}</span>
+            {% if issue.assignee %}<span>{{ issue.assignee }}</span>{% endif %}
+            {% if issue.due_date %}<span>Due {{ issue.due_date }}</span>{% endif %}
+          </div>
+          <strong><a href="/jobs/{{ issue.job_id }}">{{ issue.packet_name }}</a> &middot; {{ issue.name }}</strong>
+          <span>{{ issue.detail }}</span>
+          {% if issue.pages %}<small>Pages: {{ issue.pages|join(", ") }}</small>{% endif %}
+          {% if issue.comment %}<small>Latest comment: {{ issue.comment }}</small>{% endif %}
+        </div>
+        <form action="/issues/update" method="post" class="board-form">
+          <input type="hidden" name="board_key" value="{{ issue.board_key }}">
+          <select name="status">
+            {% for option in ["Open", "Corrected", "Accepted as Is", "False Positive", "Resolved"] %}
+              <option value="{{ option }}" {% if issue.status == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+          <input name="assignee" value="{{ issue.assignee or '' }}" placeholder="Assignee">
+          <input name="due_date" type="date" value="{{ issue.due_date or '' }}">
+          <select name="priority">
+            {% for option in ["Low", "Normal", "High", "Urgent"] %}
+              <option value="{{ option }}" {% if (issue.priority or "Normal") == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+          <input name="comment" value="{{ issue.comment or '' }}" placeholder="Correction note">
+          <button type="submit">Update</button>
+        </form>
+        {% if issue.history %}
+          <details>
+            <summary>Correction history</summary>
+            <div class="audit-list">
+              {% for event in issue.history|reverse %}
+                <div><strong>{{ event.status }}</strong><small>{{ event.at }} &middot; {{ event.assignee }} &middot; {{ event.comment }}</small></div>
+              {% endfor %}
+            </div>
+          </details>
+        {% endif %}
+      </article>
+    {% endfor %}
+    </div>
+  {% else %}
+    <p class="empty">No flags found.</p>
+  {% endif %}
+</section>
+{% endblock %}

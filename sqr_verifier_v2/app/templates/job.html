@@ -128,6 +128,7 @@
     <form action="/jobs/{{ job.id }}/rerun" method="post">
       <button type="submit" class="secondary">Re-run packet</button>
     </form>
+    <a class="secondary-link" href="/jobs/{{ job.id }}/fields">Field confidence</a>
 
     <h3 id="review-signoff">Reviewer sign-off</h3>
     {% if job.review_signoff %}

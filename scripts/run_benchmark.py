@@ -56,6 +56,16 @@ def main() -> int:
         if expected_overall and report.overall != expected_overall:
             print(f"  expected {expected_overall}")
             failures += 1
+        expected_flags = packet.get("expected_flags")
+        if expected_flags is not None and report.n_fail != int(expected_flags):
+            print(f"  expected {expected_flags} flag(s)")
+            failures += 1
+        required_flag_terms = packet.get("required_flag_terms", [])
+        flag_text = "\n".join(f"{c.name} {c.detail}" for c in report.all_checks if c.status == "fail").lower()
+        for term in required_flag_terms:
+            if str(term).lower() not in flag_text:
+                print(f"  missing expected flag term: {term}")
+                failures += 1
 
     print(f"Benchmark output: {base_output}")
     return 1 if failures else 0

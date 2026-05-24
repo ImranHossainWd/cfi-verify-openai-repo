@@ -511,6 +511,7 @@ class PageRecord:
     is_likely_photo: bool = False
     text_len: int = 0
     ocr_backend_used: str = "tesseract"
+    confidence_estimate: float = 0.0
     notes: List[str] = field(default_factory=list)
 
 
@@ -677,6 +678,7 @@ INTERNAL_FIELD_KEYS = {
     "labeling", "packaging_style", "packaging_count",
     "total_defect_pct_max",
     "customer_profile",
+    "_page_confidence", "_field_confidence",
 }
 
 # Known fields that always render in this fixed order at the top of the matrix
@@ -1681,6 +1683,14 @@ def build_pages(image_paths: List[Path], txt_dir: Path, ocr: HybridOCR,
         label, code = classify_page(text, vision)
         # Field extraction
         fields = extract_fields(text, code, config, vision_data=vision)
+        confidence = float((vision or tess).get("confidence_estimate") or 0.0)
+        field_confidence = {
+            k: confidence
+            for k, v in fields.items()
+            if k not in INTERNAL_FIELD_KEYS and v not in (None, "", [], {})
+        }
+        fields["_page_confidence"] = round(confidence, 3)
+        fields["_field_confidence"] = field_confidence
         rec = PageRecord(
             page_no=n,
             image_path=str(img),
@@ -1691,6 +1701,7 @@ def build_pages(image_paths: List[Path], txt_dir: Path, ocr: HybridOCR,
             red_pct=marks["red_pct"],
             text_len=len(text.strip()),
             ocr_backend_used="vision" if vision and not vision.get("error") else "tesseract",
+            confidence_estimate=round(confidence, 3),
         )
         if vision_error:
             rec.notes.append(f"Vision OCR error: {vision_error}")
@@ -2163,6 +2174,7 @@ def write_trace_json(report: PacketReport, out_json: Path) -> None:
                 "form_label": p.form_label,
                 "form_code": p.form_code,
                 "ocr_backend_used": p.ocr_backend_used,
+                "confidence_estimate": p.confidence_estimate,
                 "yellow_pct": p.yellow_pct,
                 "red_pct":    p.red_pct,
                 "is_photo":   p.is_likely_photo,

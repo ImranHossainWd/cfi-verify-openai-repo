@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="detail">
+  <a class="back" href="/jobs/{{ job.id }}">Back to packet</a>
+  <p class="eyebrow">Extraction QA</p>
+  <h1>Field confidence</h1>
+  <p>{{ job.packet_name }}</p>
+</section>
+
+<section class="panel">
+  {% if fields %}
+    <div class="table-preview__wrap">
+      <table class="confidence-table">
+        <thead>
+          <tr><th>Page</th><th>Form</th><th>Field</th><th>Value</th><th>Confidence</th><th>OCR</th></tr>
+        </thead>
+        <tbody>
+        {% for row in fields %}
+          <tr>
+            <td>{{ row.page_no }}</td>
+            <td>{{ row.form }}</td>
+            <td>{{ row.field }}</td>
+            <td>{{ row.value }}</td>
+            <td><span class="confidence-pill {% if row.confidence < 0.7 %}low{% elif row.confidence < 0.9 %}mid{% else %}high{% endif %}">{{ "%.2f"|format(row.confidence) }}</span></td>
+            <td>{{ row.backend }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty">No trace fields found yet. Re-run the packet after this update to populate confidence rows.</p>
+  {% endif %}
+</section>
+{% endblock %}
