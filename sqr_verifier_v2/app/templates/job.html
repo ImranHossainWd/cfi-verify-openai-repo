@@ -90,8 +90,10 @@
           data-file-name="{{ file.filename }}"
           data-file-extension="{{ file.extension }}"
           data-preview-url="{{ file.preview_url }}"
+          data-table-preview-url="{{ file.table_preview_url }}"
           data-download-url="{{ file.download_url }}"
           data-previewable="{{ 'true' if file.previewable else 'false' }}"
+          data-table-preview="{{ 'true' if file.table_preview else 'false' }}"
         >
           <span>
             {{ file.label }}
@@ -208,8 +210,10 @@ function showFilePreview(card) {
   const fileName = card.dataset.fileName;
   const extension = card.dataset.fileExtension;
   const previewUrl = card.dataset.previewUrl;
+  const tablePreviewUrl = card.dataset.tablePreviewUrl;
   const downloadUrl = card.dataset.downloadUrl;
   const previewable = card.dataset.previewable === "true";
+  const tablePreview = card.dataset.tablePreview === "true";
 
   fileViewer.hidden = false;
   fileViewerTitle.textContent = label;
@@ -222,6 +226,11 @@ function showFilePreview(card) {
     message.className = "empty file-preview-empty";
     message.textContent = "This file type cannot be previewed directly in the dashboard. Use Download to open it.";
     fileViewerBody.appendChild(message);
+    return;
+  }
+
+  if (tablePreview) {
+    renderTablePreview(tablePreviewUrl);
     return;
   }
 
@@ -251,6 +260,73 @@ function showFilePreview(card) {
     })
     .catch((error) => {
       pre.textContent = `Could not load preview: ${error}`;
+    });
+}
+
+function renderTablePreview(url) {
+  const shell = document.createElement("div");
+  shell.className = "table-preview";
+  shell.textContent = "Loading table preview...";
+  fileViewerBody.appendChild(shell);
+
+  fetch(url)
+    .then((res) => {
+      if (!res.ok) throw new Error(`Preview failed (${res.status})`);
+      return res.json();
+    })
+    .then((data) => {
+      shell.innerHTML = "";
+      if (data.truncated) {
+        const note = document.createElement("p");
+        note.className = "table-preview__note";
+        note.textContent = "Preview is limited to the first rows/columns. Download for the full file.";
+        shell.appendChild(note);
+      }
+
+      const tabs = document.createElement("div");
+      tabs.className = "page-tabs table-preview__tabs";
+      const tableWrap = document.createElement("div");
+      tableWrap.className = "table-preview__wrap";
+      shell.appendChild(tabs);
+      shell.appendChild(tableWrap);
+
+      function showSheet(sheet, activeButton) {
+        tabs.querySelectorAll("button").forEach((button) => button.classList.remove("active"));
+        activeButton.classList.add("active");
+        tableWrap.innerHTML = "";
+
+        const table = document.createElement("table");
+        const body = document.createElement("tbody");
+        const rows = sheet.rows || [];
+        rows.forEach((row, rowIndex) => {
+          const tr = document.createElement("tr");
+          const cellTag = rowIndex === 0 ? "th" : "td";
+          row.forEach((cell) => {
+            const td = document.createElement(cellTag);
+            td.textContent = cell === null || cell === undefined ? "" : cell;
+            tr.appendChild(td);
+          });
+          body.appendChild(tr);
+        });
+        table.appendChild(body);
+        tableWrap.appendChild(table);
+      }
+
+      (data.sheets || []).forEach((sheet, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = sheet.name || `Sheet ${index + 1}`;
+        button.addEventListener("click", () => showSheet(sheet, button));
+        tabs.appendChild(button);
+        if (index === 0) showSheet(sheet, button);
+      });
+
+      if (!data.sheets || data.sheets.length === 0) {
+        shell.textContent = "No rows found in this file.";
+      }
+    })
+    .catch((error) => {
+      shell.textContent = `Could not load table preview: ${error}`;
     });
 }
 

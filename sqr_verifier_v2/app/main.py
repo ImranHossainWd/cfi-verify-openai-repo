@@ -9,6 +9,7 @@ import threading
 import traceback
 import urllib.error
 import urllib.request
+import csv
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,6 +17,7 @@ from uuid import uuid4
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -35,7 +37,9 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-05-24-clickable-flag-pages"
+APP_VERSION = "2026-05-24-note-resolution-aliases"
+PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
+PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
 UPLOAD_DIR = DATA_DIR / "uploads"
 OUTPUT_DIR = DATA_DIR / "outputs"
@@ -158,8 +162,10 @@ def output_files(job: Dict[str, Any]) -> List[Dict[str, Any]]:
             "url": f"/jobs/{job['id']}/download/{path.name}",
             "download_url": f"/jobs/{job['id']}/download/{path.name}",
             "preview_url": f"/jobs/{job['id']}/view/{path.name}",
+            "table_preview_url": f"/jobs/{job['id']}/preview/{path.name}",
             "extension": path.suffix.lower().lstrip("."),
-            "previewable": path.suffix.lower() in {".pdf", ".png", ".csv", ".json"},
+            "previewable": path.suffix.lower() in {".pdf", ".png", ".csv", ".json", ".xlsx"},
+            "table_preview": path.suffix.lower() in {".csv", ".xlsx"},
         }
         for label, path in candidates
         if path.exists()
@@ -188,6 +194,62 @@ def page_image_path(job: Dict[str, Any], page_no: int) -> Path:
         if out_dir in path.parents and path.exists():
             return path
     raise HTTPException(status_code=404, detail="Page image not found")
+
+
+def _cell_to_preview(value: Any) -> Any:
+    if value is None:
+        return ""
+    if isinstance(value, (int, float, bool)):
+        return value
+    return str(value)
+
+
+def preview_table_file(path: Path) -> Dict[str, Any]:
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        rows: List[List[Any]] = []
+        with path.open("r", encoding="utf-8-sig", newline="") as f:
+            reader = csv.reader(f)
+            for i, row in enumerate(reader):
+                if i >= PREVIEW_MAX_ROWS:
+                    break
+                rows.append([_cell_to_preview(cell) for cell in row[:PREVIEW_MAX_COLS]])
+        return {
+            "filename": path.name,
+            "type": "csv",
+            "truncated": len(rows) >= PREVIEW_MAX_ROWS,
+            "sheets": [{"name": "CSV", "rows": rows}],
+        }
+    if suffix == ".xlsx":
+        from openpyxl import load_workbook
+
+        wb = load_workbook(path, read_only=True, data_only=True)
+        sheets = []
+        for ws in wb.worksheets:
+            rows = []
+            for i, row in enumerate(ws.iter_rows(values_only=True)):
+                if i >= PREVIEW_MAX_ROWS:
+                    break
+                rows.append([_cell_to_preview(cell) for cell in row[:PREVIEW_MAX_COLS]])
+            sheets.append(
+                {
+                    "name": ws.title,
+                    "rows": rows,
+                    "source_rows": ws.max_row,
+                    "source_cols": ws.max_column,
+                }
+            )
+        return {
+            "filename": path.name,
+            "type": "xlsx",
+            "truncated": any(
+                sheet.get("source_rows", 0) > PREVIEW_MAX_ROWS
+                or sheet.get("source_cols", 0) > PREVIEW_MAX_COLS
+                for sheet in sheets
+            ),
+            "sheets": sheets,
+        }
+    raise HTTPException(status_code=415, detail="Table preview is only available for CSV and XLSX files")
 
 
 def run_verification(job_id: str) -> None:
@@ -352,6 +414,13 @@ async def view_file(job_id: str, filename: str) -> FileResponse:
     )
 
 
+@app.get("/jobs/{job_id}/preview/{filename}")
+async def preview_file(job_id: str, filename: str) -> JSONResponse:
+    job = get_job(job_id)
+    path = output_file_path(job, filename)
+    return JSONResponse(preview_table_file(path))
+
+
 @app.get("/jobs/{job_id}/page/{page_no}.png")
 async def page_image(job_id: str, page_no: int) -> FileResponse:
     job = get_job(job_id)
@@ -386,6 +455,8 @@ async def diagnostics() -> Dict[str, Any]:
         "anthropic_model": ANTHROPIC_MODEL,
         "openai_model": OPENAI_MODEL,
         "full_packet_field_discovery": FULL_PACKET_FIELD_DISCOVERY,
+        "preview_max_rows": PREVIEW_MAX_ROWS,
+        "preview_max_cols": PREVIEW_MAX_COLS,
         "anthropic_key_present": bool(os.environ.get("ANTHROPIC_API_KEY")),
         "openai_key_present": bool(os.environ.get("OPENAI_API_KEY")),
         "tesseract_path": shutil.which("tesseract"),

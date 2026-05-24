@@ -347,12 +347,29 @@ def extract_fields(text: str, code: str, config: Config,
                 pass
         if vision_data.get("crop_year"):
             f["crop_year"] = vision_data["crop_year"]
+        if vision_data.get("original_crop_years"):
+            f["original_crop_years"] = vision_data["original_crop_years"]
+        if vision_data.get("original_line"):
+            f["original_line"] = vision_data["original_line"]
+        if vision_data.get("total_defect_pct") is not None:
+            try:
+                f["total_defect_pct"] = float(str(vision_data["total_defect_pct"]).replace("%", ""))
+            except (ValueError, TypeError):
+                pass
         if vision_data.get("initials_present"):
             f["initials_present"] = vision_data["initials_present"]
             f["initials"] = vision_data["initials_present"]   # alias for backwards-compat
         if vision_data.get("checkbox_status"):
             f["checkbox_status"] = vision_data["checkbox_status"]
             f["checkboxes"]      = vision_data["checkbox_status"]
+        if vision_data.get("shipping_inspection_items"):
+            f["shipping_inspection_items"] = _normalize_inspection_items(
+                vision_data["shipping_inspection_items"]
+            )
+        if vision_data.get("shipment_decision"):
+            f["shipment_decision"] = vision_data["shipment_decision"]
+        if vision_data.get("comments_corrective_actions"):
+            f["comments_corrective_actions"] = vision_data["comments_corrective_actions"]
         if vision_data.get("is_defect_bag_photo"):
             f["is_photo"] = True
             f["defect_bag_label"] = vision_data.get("defect_bag_label")
@@ -361,6 +378,7 @@ def extract_fields(text: str, code: str, config: Config,
         if vision_data.get("handwritten_corrections"):
             f["corrections"] = vision_data["handwritten_corrections"]
         dynamic_fields = _flatten_dynamic_fields(vision_data.get("all_fields") or {})
+        _apply_dynamic_field_aliases(f, dynamic_fields)
         for k, v in dynamic_fields.items():
             f.setdefault(k, v)
         # ---- Auto-pick-up of every scalar field vision OCR returns ----
@@ -372,7 +390,9 @@ def extract_fields(text: str, code: str, config: Config,
             "invoice_number", "bol_number", "customer_name",
             "product_description", "product_code", "dates", "quantities",
             "moisture_pct", "sulfur_ppm", "aflatoxin", "crop_year",
+            "original_crop_years", "original_line", "total_defect_pct",
             "initials_present", "checkbox_status",
+            "shipping_inspection_items", "shipment_decision", "comments_corrective_actions",
             "is_defect_bag_photo", "defect_bag_label",
             "metal_detector_findings", "handwritten_corrections",
             "all_fields", "notes", "raw_text", "backend", "confidence_estimate",
@@ -386,6 +406,7 @@ def extract_fields(text: str, code: str, config: Config,
             if k in f:                           # don't overwrite already-set
                 continue
             f[k] = v
+        _apply_dynamic_field_aliases(f, {k: v for k, v in f.items() if k not in RESERVED})
 
     # Always do Tesseract extraction too (as fallback / supplement)
     m = RX_INV.search(text)
@@ -743,6 +764,83 @@ def _flatten_dynamic_fields(value: Any, prefix: str = "") -> Dict[str, Any]:
         if field_key and scalar is not None:
             out[field_key] = scalar
     return out
+
+
+def _number_from_value(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    m = re.search(r"[-+]?\d+(?:\.\d+)?", str(value).replace(",", ""))
+    return float(m.group(0)) if m else None
+
+
+def _json_or_original(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    s = value.strip()
+    if not ((s.startswith("[") and s.endswith("]")) or (s.startswith("{") and s.endswith("}"))):
+        return value
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        return value
+
+
+def _normalize_inspection_items(value: Any) -> Any:
+    items = _json_or_original(value)
+    if not isinstance(items, list):
+        return items
+    normalized = []
+    for item in items:
+        if not isinstance(item, dict):
+            normalized.append({"item": str(item), "status": "Unreadable"})
+            continue
+        out = dict(item)
+        status = str(out.get("status") or out.get("result") or out.get("value") or "").strip().lower()
+        if status in {"ok", "okay", "pass", "passed", "yes", "y", "checked", "true"}:
+            out["status"] = "Okay"
+        elif status in {"fail", "failed", "no", "n", "false"}:
+            out["status"] = "Fail"
+        elif not status:
+            out["status"] = "Blank"
+        else:
+            out["status"] = out.get("status") or status.title()
+        normalized.append(out)
+    return normalized
+
+
+def _apply_dynamic_field_aliases(fields: Dict[str, Any], dynamic_fields: Dict[str, Any]) -> None:
+    """Promote packet-specific all_fields keys into canonical fields used by rules."""
+    for key, value in dynamic_fields.items():
+        low = key.lower()
+        parsed = _json_or_original(value)
+        if "po" not in fields and (
+            re.search(r"(^|_)po($|_)", low) or "purchase_order" in low or "purchase order" in low
+        ):
+            match = re.search(r"\b(?:PO[#:\s-]*)?([A-Za-z]*\d[\w-]{2,})\b", str(value), flags=re.I)
+            if match:
+                fields["po"] = match.group(1)
+        if "total_defect_pct" not in fields and "defect" in low and (
+            "pct" in low or "percent" in low or "avg" in low or "average" in low or "%" in str(value)
+        ):
+            number = _number_from_value(value)
+            if number is not None:
+                fields["total_defect_pct"] = number
+        if "original_crop_years" not in fields and "original" in low and "crop" in low:
+            fields["original_crop_years"] = parsed
+        if "original_line" not in fields and "original" in low and "line" in low:
+            fields["original_line"] = parsed
+        if "carrier" not in fields and ("carrier" in low or "trucking" in low):
+            fields["carrier"] = parsed
+        if "shipping_inspection_items" not in fields and "inspection" in low and (
+            "item" in low or "table" in low or "shipping" in low or "trailer" in low or "cargo" in low
+        ):
+            normalized = _normalize_inspection_items(parsed)
+            if isinstance(normalized, list):
+                fields["shipping_inspection_items"] = normalized
+        if "shipment_decision" not in fields and "shipment" in low and "decision" in low:
+            fields["shipment_decision"] = parsed
 
 
 def discover_field_rows(pages: List[PageRecord],
