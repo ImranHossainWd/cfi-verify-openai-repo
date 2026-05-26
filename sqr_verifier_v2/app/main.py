@@ -38,7 +38,7 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-05-26-accepted-as-pass"
+APP_VERSION = "2026-05-26-reviewed-output-files"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
@@ -557,6 +557,127 @@ def preview_table_file(path: Path) -> Dict[str, Any]:
     raise HTTPException(status_code=415, detail="Table preview is only available for CSV and XLSX files")
 
 
+def write_reviewed_issues_csv(job: Dict[str, Any]) -> None:
+    summary = (job.get("summary") or {})
+    path = Path(job["output_dir"]) / f"{job['packet_name']}_issues.csv"
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["#", "Status", "Sub-packet", "Check", "Detail", "Pages", "Resolution (human)"])
+        for idx, issue in enumerate(summary.get("issues", []), start=1):
+            writer.writerow([
+                idx,
+                "FLAG",
+                issue.get("sub_packet", ""),
+                issue.get("name", ""),
+                issue.get("detail", ""),
+                ", ".join(map(str, issue.get("pages") or [])),
+                issue.get("comment", ""),
+            ])
+
+
+def write_reviewed_summary_png(job: Dict[str, Any]) -> Optional[Path]:
+    summary = job.get("summary") or {}
+    out_path = Path(job["output_dir"]) / f"{job['packet_name']}_summary.png"
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+
+        im = Image.new("RGB", (2100, 2700), "white")
+        draw = ImageDraw.Draw(im)
+        try:
+            big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 64)
+            h1 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
+            bd = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+            rg = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+        except Exception:
+            big = h1 = bd = rg = ImageFont.load_default()
+
+        overall = summary.get("overall", "PASS")
+        banner = (200, 240, 200) if overall == "PASS" else (255, 210, 200)
+        draw.rectangle([(0, 0), (2100, 200)], fill=banner)
+        draw.text((40, 30), f"AI VERIFICATION - {overall}", fill=(0, 0, 0), font=big)
+        draw.text((40, 110), f"Packet: {job['packet_name']}", fill=(0, 0, 0), font=h1)
+
+        y = 250
+        rows = [
+            ("Sub-packets:", str(summary.get("sub_packet_count", 0))),
+            ("Customer:", (summary.get("sub_packets") or [{}])[0].get("customer", "(unknown)") if summary.get("sub_packets") else "(unknown)"),
+            ("Total pages:", str(summary.get("page_count", ""))),
+            ("Verified at:", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        ]
+        for key, value in rows:
+            draw.text((60, y), key, fill=(0, 0, 0), font=bd)
+            draw.text((360, y), str(value), fill=(0, 0, 0), font=rg)
+            y += 50
+
+        y += 30
+        draw.text((60, y), "Result tally:", fill=(0, 0, 0), font=h1)
+        y += 60
+        draw.text((80, y), f"{summary.get('pass_count', 0)} checks passed", fill=(40, 140, 60), font=bd)
+        y += 50
+        draw.text((80, y), f"{summary.get('fail_count', 0)} flag(s) raised", fill=(235, 130, 25), font=bd)
+        y += 70
+
+        issues = summary.get("issues") or []
+        if issues:
+            draw.text((60, y), "Issues to review:", fill=(235, 130, 25), font=h1)
+            y += 60
+            for idx, issue in enumerate(issues, start=1):
+                sp_tag = f" [sub-packet {issue.get('sub_packet')}]" if issue.get("sub_packet") else ""
+                line = f"{idx}. {issue.get('name', '')}{sp_tag} - {issue.get('detail', '')}"
+                if len(line) > 160:
+                    line = line[:157] + "..."
+                draw.text((80, y), line, fill=(0, 0, 0), font=rg)
+                y += 36
+                if y > 2460:
+                    break
+        else:
+            draw.text((60, y), "No issues raised. Packet is accepted after review.", fill=(40, 140, 60), font=h1)
+
+        sig_y = 2420
+        draw.text((60, sig_y), "Reviewer signature: _____________________________   Date: ___________", fill=(0, 0, 0), font=bd)
+        draw.text((60, sig_y + 60), "Accepted/false-positive/resolved flags are counted as passed by reviewer.", fill=(80, 80, 80), font=rg)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        im.save(out_path)
+        return out_path
+    except Exception as exc:  # noqa: BLE001
+        print(f"Reviewed summary image skipped: {exc}")
+        return None
+
+
+def replace_pdf_summary_page(job: Dict[str, Any], summary_png: Path) -> None:
+    pdf_path = Path(job["output_dir"]) / f"{job['packet_name']}_AI_VERIFIED.pdf"
+    if not pdf_path.exists() or not summary_png.exists():
+        return
+    try:
+        from PIL import Image
+        from pypdf import PdfReader, PdfWriter
+
+        summary_pdf = summary_png.with_suffix(".reviewed-summary.pdf")
+        Image.open(summary_png).convert("RGB").save(summary_pdf)
+        summary_reader = PdfReader(str(summary_pdf))
+        original_reader = PdfReader(str(pdf_path))
+        writer = PdfWriter()
+        writer.add_page(summary_reader.pages[0])
+        for page in list(original_reader.pages)[1:]:
+            writer.add_page(page)
+        tmp = pdf_path.with_suffix(".reviewed.tmp.pdf")
+        with tmp.open("wb") as f:
+            writer.write(f)
+        tmp.replace(pdf_path)
+    except Exception as exc:  # noqa: BLE001
+        print(f"Reviewed PDF summary replacement skipped: {exc}")
+
+
+def refresh_reviewed_output_files(raw_job: Dict[str, Any]) -> None:
+    if raw_job.get("status") != "complete" or not raw_job.get("summary"):
+        return
+    job = public_job(raw_job)
+    write_reviewed_issues_csv(job)
+    summary_png = write_reviewed_summary_png(job)
+    if summary_png:
+        replace_pdf_summary_page(job, summary_png)
+
+
 def read_trace(job: Dict[str, Any]) -> Dict[str, Any]:
     trace_path = Path(job["output_dir"]) / f"{job['packet_name']}_trace.json"
     if not trace_path.exists():
@@ -687,13 +808,14 @@ def run_verification(job_id: str) -> None:
                 "Tesseract-only report and may miss handwriting."
             )
         summary["warnings"] = warnings
-        update_job(
+        final_job = update_job(
             job_id,
             status="complete",
             completed_at=utc_now(),
             message="Verification complete with OCR warnings" if warnings else "Verification complete",
             summary=summary,
         )
+        refresh_reviewed_output_files(final_job)
     except Exception as exc:  # noqa: BLE001 - show useful operator error on job page
         update_job(
             job_id,
@@ -953,7 +1075,9 @@ async def create_job(
 
 @app.get("/jobs/{job_id}", response_class=HTMLResponse)
 async def job_detail(request: Request, job_id: str) -> HTMLResponse:
-    job = public_job(get_job(job_id))
+    raw_job = get_job(job_id)
+    refresh_reviewed_output_files(raw_job)
+    job = public_job(raw_job)
     return templates.TemplateResponse(
         "job.html",
         {
@@ -1024,6 +1148,7 @@ async def update_issue_review(
         job["updated_at"] = utc_now()
         jobs[job_id] = job
         save_jobs(jobs)
+    refresh_reviewed_output_files(get_job(job_id))
     return RedirectResponse(url=f"/jobs/{job_id}#review-queue", status_code=303)
 
 
