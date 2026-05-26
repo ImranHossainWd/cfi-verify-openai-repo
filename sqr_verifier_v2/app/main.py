@@ -38,7 +38,7 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-05-26-reviewed-flags-mobile-nav"
+APP_VERSION = "2026-05-26-accepted-as-pass"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
@@ -160,8 +160,9 @@ def flags_only_summary(summary: Optional[Dict[str, Any]]) -> Optional[Dict[str, 
     clean["active_fail_count"] = len(active_flags)
     clean["reviewed_fail_count"] = len(reviewed_flags)
     clean["fail_count"] = len(active_flags)
+    clean["pass_count"] = int(clean.get("pass_count") or 0) + len(reviewed_flags)
     if flags and not active_flags:
-        clean["overall"] = "REVIEWED"
+        clean["overall"] = "PASS"
     clean["failures"] = [item for item in clean.get("failures", [])]
     return clean
 
