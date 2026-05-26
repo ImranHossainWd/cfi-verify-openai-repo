@@ -23,6 +23,9 @@
         <div><strong>{{ job.summary.overall }}</strong><small>Overall</small></div>
         <div><strong>{{ job.summary.pass_count }}</strong><small>Pass</small></div>
         <div><strong>{{ job.summary.fail_count }}</strong><small>Flags</small></div>
+        {% if job.summary.reviewed_fail_count %}
+          <div><strong>{{ job.summary.reviewed_fail_count }}</strong><small>Reviewed</small></div>
+        {% endif %}
       </div>
 
       {% if job.summary.warnings %}
@@ -90,6 +93,36 @@
         </div>
       {% else %}
         <p class="empty">No flags found.</p>
+      {% endif %}
+
+      {% if job.summary.reviewed_issues %}
+        <h3>Reviewed flags</h3>
+        <div class="issue-list reviewed-list">
+        {% for issue in job.summary.reviewed_issues %}
+          <article class="issue-card reviewed">
+            <div class="issue-card__main">
+              <div class="issue-card__meta">
+                <span>{{ issue.id }}</span>
+                <span>{{ issue.issue_type }}</span>
+                <span>{{ issue.status }}</span>
+              </div>
+              <strong>{{ issue.name }}</strong>
+              <span>{{ issue.detail }}</span>
+              {% if issue.pages %}<small>Pages: {{ issue.pages|join(", ") }}</small>{% endif %}
+              {% if issue.comment %}<small>Reviewer comment: {{ issue.comment }}</small>{% endif %}
+            </div>
+            {% if issue.pages %}
+              <button
+                type="button"
+                class="secondary small issue-open"
+                data-flag-name="{{ issue.name }}"
+                data-flag-detail="{{ issue.detail }}"
+                data-flag-pages='{{ issue.pages|tojson }}'
+              >View pages</button>
+            {% endif %}
+          </article>
+        {% endfor %}
+        </div>
       {% endif %}
     {% else %}
       <p class="empty">This job is {{ job.status }}. The page will refresh while it runs.</p>

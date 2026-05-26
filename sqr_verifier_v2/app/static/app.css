@@ -125,7 +125,7 @@ button.secondary { background: var(--ink); margin-top: 18px; }
 }
 .status.queued { background: #eef2f7; color: var(--muted); }
 .status.running { background: #e7f0ff; color: var(--blue); }
-.status.complete, .score.pass { background: #e7f8ee; color: var(--ok); }
+.status.complete, .score.pass, .score.reviewed { background: #e7f8ee; color: var(--ok); }
 .status.failed, .score.fail { background: #ffeae8; color: var(--bad); }
 .counts { color: var(--muted); font-size: 13px; }
 .empty { color: var(--muted); margin: 0; }
@@ -142,7 +142,7 @@ button.secondary { background: var(--ink); margin-top: 18px; }
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
 }
-.metrics--three { grid-template-columns: repeat(3, 1fr); }
+.metrics--three { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .metrics div {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -172,6 +172,7 @@ button.secondary { background: var(--ink); margin-top: 18px; }
 }
 .issue-card.fail { border-left-color: var(--bad); }
 .issue-card.info { border-left-color: var(--blue); }
+.issue-card.reviewed { border-left-color: var(--ok); background: #fbfffd; }
 .issue-card__main { display: grid; gap: 5px; min-width: 0; }
 .issue-card__meta {
   display: flex;

@@ -38,7 +38,7 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-05-24-ops-workflow"
+APP_VERSION = "2026-05-26-reviewed-flags-mobile-nav"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
@@ -63,6 +63,7 @@ FULL_PACKET_FIELD_DISCOVERY = os.environ.get("FULL_PACKET_FIELD_DISCOVERY", "").
 }
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "150"))
 PROVIDERS = ["openai", "anthropic", "mock"]
+RESOLVED_ISSUE_STATUSES = {"Accepted as Is", "False Positive", "Resolved"}
 CONFIG_EDITABLE_FILES = {
     "rules": "rules.yaml",
     "customers": "customers.yaml",
@@ -151,7 +152,16 @@ def flags_only_summary(summary: Optional[Dict[str, Any]]) -> Optional[Dict[str, 
         return summary
     clean = dict(summary)
     clean["info_count"] = 0
-    clean["issues"] = [item for item in clean.get("issues", []) if item.get("check_status") == "fail"]
+    flags = [item for item in clean.get("issues", []) if item.get("check_status") == "fail"]
+    active_flags = [item for item in flags if item.get("status", "Open") not in RESOLVED_ISSUE_STATUSES]
+    reviewed_flags = [item for item in flags if item.get("status", "Open") in RESOLVED_ISSUE_STATUSES]
+    clean["issues"] = active_flags
+    clean["reviewed_issues"] = reviewed_flags
+    clean["active_fail_count"] = len(active_flags)
+    clean["reviewed_fail_count"] = len(reviewed_flags)
+    clean["fail_count"] = len(active_flags)
+    if flags and not active_flags:
+        clean["overall"] = "REVIEWED"
     clean["failures"] = [item for item in clean.get("failures", [])]
     return clean
 
@@ -159,18 +169,18 @@ def flags_only_summary(summary: Optional[Dict[str, Any]]) -> Optional[Dict[str, 
 def apply_board_review(job: Dict[str, Any]) -> Dict[str, Any]:
     board = load_json_file(BOARD_FILE, {})
     summary = job.get("summary") or {}
-    for issue in summary.get("issues", []):
+    for issue in summary.get("issues", []) + summary.get("reviewed_issues", []):
         state = board.get(issue_key(job["id"], issue), {})
         if state:
             issue.update({k: v for k, v in state.items() if k in {
                 "status", "comment", "assignee", "due_date", "priority", "updated_at"
             }})
+    job["summary"] = flags_only_summary(summary)
     return job
 
 
 def public_job(job: Dict[str, Any]) -> Dict[str, Any]:
     clean = dict(job)
-    clean["summary"] = flags_only_summary(clean.get("summary"))
     clean = apply_board_review(clean)
     return clean
 
@@ -292,7 +302,7 @@ def issue_board_items() -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     for job in sorted([public_job(j) for j in load_jobs().values()], key=lambda j: j.get("created_at", ""), reverse=True):
         summary = job.get("summary") or {}
-        for issue in summary.get("issues", []):
+        for issue in summary.get("issues", []) + summary.get("reviewed_issues", []):
             key = issue_key(job["id"], issue)
             state = board.get(key, {})
             items.append({
