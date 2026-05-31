@@ -10,7 +10,10 @@ import traceback
 import urllib.error
 import urllib.request
 import csv
-from datetime import datetime, timezone
+import hashlib
+import hmac
+import secrets
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -38,7 +41,7 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-05-26-reviewed-output-files"
+APP_VERSION = "2026-05-31-built-in-login"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
@@ -48,6 +51,8 @@ JOBS_FILE = DATA_DIR / "jobs.json"
 INSPECTIONS_FILE = DATA_DIR / "inspections.json"
 BOARD_FILE = DATA_DIR / "issue_board.json"
 TEMPLATES_FILE = DATA_DIR / "form_templates.json"
+USERS_FILE = DATA_DIR / "users.json"
+SESSIONS_FILE = DATA_DIR / "sessions.json"
 MONTHLY_DIR = DATA_DIR / "monthly"
 BUNDLED_CONFIG_DIR = ROOT / "config"
 CONFIG_DIR = Path(os.environ.get("SQR_CONFIG_DIR", DATA_DIR / "config")).resolve()
@@ -64,6 +69,10 @@ FULL_PACKET_FIELD_DISCOVERY = os.environ.get("FULL_PACKET_FIELD_DISCOVERY", "").
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "150"))
 PROVIDERS = ["openai", "anthropic", "mock"]
 RESOLVED_ISSUE_STATUSES = {"Accepted as Is", "False Positive", "Resolved"}
+SESSION_COOKIE = "sqr_session"
+AUTH_SESSION_DAYS = int(os.environ.get("AUTH_SESSION_DAYS", "14"))
+AUTH_COOKIE_SECURE = os.environ.get("AUTH_COOKIE_SECURE", "true").strip().lower() in {"1", "true", "yes", "on"}
+ROLE_ORDER = {"Viewer": 1, "Reviewer": 2, "Admin": 3}
 CONFIG_EDITABLE_FILES = {
     "rules": "rules.yaml",
     "customers": "customers.yaml",
@@ -116,6 +125,162 @@ def save_json_file(path: Path, data: Any) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
     tmp.replace(path)
+
+
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def hash_password(password: str, salt: Optional[str] = None) -> str:
+    salt = salt or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 180_000)
+    return f"pbkdf2_sha256${salt}${digest.hex()}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        method, salt, digest = stored.split("$", 2)
+    except ValueError:
+        return False
+    if method != "pbkdf2_sha256":
+        return False
+    expected = hash_password(password, salt).split("$", 2)[2]
+    return hmac.compare_digest(expected, digest)
+
+
+def load_users() -> Dict[str, Dict[str, Any]]:
+    return load_json_file(USERS_FILE, {})
+
+
+def save_users(users: Dict[str, Dict[str, Any]]) -> None:
+    save_json_file(USERS_FILE, users)
+
+
+def bootstrap_admin_from_env() -> None:
+    users = load_users()
+    if users:
+        return
+    email = normalize_email(os.environ.get("ADMIN_EMAIL", ""))
+    password = os.environ.get("ADMIN_PASSWORD", "")
+    if not email or not password:
+        return
+    users[email] = {
+        "email": email,
+        "name": os.environ.get("ADMIN_NAME", "Admin").strip() or "Admin",
+        "role": "Admin",
+        "active": True,
+        "password_hash": hash_password(password),
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+    }
+    save_users(users)
+
+
+def create_user(email: str, password: str, role: str, name: str = "", active: bool = True) -> Dict[str, Any]:
+    clean_email = normalize_email(email)
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail="Enter a valid email address.")
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+    if role not in ROLE_ORDER:
+        raise HTTPException(status_code=400, detail="Unsupported role.")
+    users = load_users()
+    if clean_email in users:
+        raise HTTPException(status_code=400, detail="User already exists.")
+    user = {
+        "email": clean_email,
+        "name": name.strip() or clean_email,
+        "role": role,
+        "active": active,
+        "password_hash": hash_password(password),
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+    }
+    users[clean_email] = user
+    save_users(users)
+    return user
+
+
+def load_sessions() -> Dict[str, Dict[str, Any]]:
+    return load_json_file(SESSIONS_FILE, {})
+
+
+def save_sessions(sessions: Dict[str, Dict[str, Any]]) -> None:
+    save_json_file(SESSIONS_FILE, sessions)
+
+
+def create_session(email: str) -> str:
+    sessions = load_sessions()
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=AUTH_SESSION_DAYS)
+    sessions[token] = {
+        "email": normalize_email(email),
+        "created_at": utc_now(),
+        "expires_at": expires_at.isoformat(timespec="seconds"),
+    }
+    save_sessions(sessions)
+    return token
+
+
+def active_admin_count(users: Dict[str, Dict[str, Any]]) -> int:
+    return sum(1 for user in users.values() if user.get("active", True) and user.get("role") == "Admin")
+
+
+def expire_session(token: str) -> None:
+    if not token:
+        return
+    sessions = load_sessions()
+    if token in sessions:
+        del sessions[token]
+        save_sessions(sessions)
+
+
+def current_user_from_request(request: Request) -> Optional[Dict[str, Any]]:
+    token = request.cookies.get(SESSION_COOKIE, "")
+    if not token:
+        return None
+    sessions = load_sessions()
+    session = sessions.get(token)
+    if not session:
+        return None
+    try:
+        expires_at = datetime.fromisoformat(session.get("expires_at", ""))
+    except ValueError:
+        expire_session(token)
+        return None
+    if expires_at < datetime.now(timezone.utc):
+        expire_session(token)
+        return None
+    user = load_users().get(normalize_email(session.get("email", "")))
+    if not user or not user.get("active", True):
+        return None
+    return {k: v for k, v in user.items() if k != "password_hash"}
+
+
+def role_at_least(user: Optional[Dict[str, Any]], role: str) -> bool:
+    if not user:
+        return False
+    return ROLE_ORDER.get(user.get("role", "Viewer"), 0) >= ROLE_ORDER[role]
+
+
+def actor_from_request(request: Request) -> str:
+    user = getattr(request.state, "user", None) or {}
+    return user.get("email") or "system"
+
+
+def safe_next_path(next_url: str) -> str:
+    next_url = (next_url or "/").strip()
+    if not next_url.startswith("/") or next_url.startswith("//"):
+        return "/"
+    return next_url
+
+
+def route_min_role(path: str, method: str) -> str:
+    if path.startswith(("/settings", "/templates", "/users", "/diagnostics")):
+        return "Admin"
+    if method.upper() == "POST":
+        return "Reviewer"
+    return "Viewer"
 
 
 def save_jobs(jobs: Dict[str, Dict[str, Any]]) -> None:
@@ -191,7 +356,7 @@ def audit_event(job: Dict[str, Any], action: str, detail: str, **extra: Any) -> 
     event = {
         "id": f"AUD-{len(events) + 1:04d}",
         "at": utc_now(),
-        "user": "local-reviewer",
+        "user": extra.pop("user", "system"),
         "action": action,
         "detail": detail,
     }
@@ -199,6 +364,32 @@ def audit_event(job: Dict[str, Any], action: str, detail: str, **extra: Any) -> 
     events.append(event)
     job["audit_trail"] = events
     return job
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    bootstrap_admin_from_env()
+    path = request.url.path
+    public_path = (
+        path == "/healthz"
+        or path.startswith("/static/")
+        or path in {"/login", "/logout", "/setup"}
+    )
+    user = current_user_from_request(request)
+    request.state.user = user
+
+    if not public_path and not load_users():
+        return RedirectResponse(url="/setup", status_code=303)
+    if not public_path and not user:
+        next_path = safe_next_path(path)
+        if request.url.query:
+            next_path = f"{next_path}?{request.url.query}"
+        return RedirectResponse(url=f"/login?next={next_path}", status_code=303)
+    if not public_path and not role_at_least(user, route_min_role(path, request.method)):
+        return HTMLResponse("You do not have permission to access this page.", status_code=403)
+
+    response = await call_next(request)
+    return response
 
 
 def config_file_path(config_name: str) -> Path:
@@ -826,6 +1017,142 @@ def run_verification(job_id: str) -> None:
         )
 
 
+@app.get("/setup", response_class=HTMLResponse)
+async def setup_form(request: Request) -> HTMLResponse:
+    if load_users():
+        return RedirectResponse(url="/", status_code=303)
+    return templates.TemplateResponse(
+        "setup.html",
+        {"request": request, "app_name": APP_NAME, "error": ""},
+    )
+
+
+@app.post("/setup")
+async def setup_admin(
+    email: str = Form(...),
+    password: str = Form(...),
+    name: str = Form(""),
+) -> RedirectResponse:
+    if load_users():
+        return RedirectResponse(url="/", status_code=303)
+    create_user(email=email, password=password, role="Admin", name=name or "Admin")
+    token = create_session(email)
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=AUTH_SESSION_DAYS * 24 * 60 * 60,
+        httponly=True,
+        secure=AUTH_COOKIE_SECURE,
+        samesite="lax",
+    )
+    return response
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request, next: str = "/") -> HTMLResponse:
+    if getattr(request.state, "user", None):
+        return RedirectResponse(url=safe_next_path(next), status_code=303)
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request, "app_name": APP_NAME, "next": safe_next_path(next), "error": ""},
+    )
+
+
+@app.post("/login")
+async def login(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    next: str = Form("/"),
+) -> Any:
+    clean_email = normalize_email(email)
+    user = load_users().get(clean_email)
+    if not user or not user.get("active", True) or not verify_password(password, user.get("password_hash", "")):
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "app_name": APP_NAME,
+                "next": safe_next_path(next),
+                "error": "Email or password is incorrect.",
+            },
+            status_code=401,
+        )
+    token = create_session(clean_email)
+    response = RedirectResponse(url=safe_next_path(next), status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=AUTH_SESSION_DAYS * 24 * 60 * 60,
+        httponly=True,
+        secure=AUTH_COOKIE_SECURE,
+        samesite="lax",
+    )
+    return response
+
+
+@app.get("/logout")
+async def logout(request: Request) -> RedirectResponse:
+    expire_session(request.cookies.get(SESSION_COOKIE, ""))
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE)
+    return response
+
+
+@app.get("/users", response_class=HTMLResponse)
+async def users_page(request: Request) -> HTMLResponse:
+    users = sorted(load_users().values(), key=lambda item: item.get("email", ""))
+    safe_users = [{k: v for k, v in user.items() if k != "password_hash"} for user in users]
+    return templates.TemplateResponse(
+        "users.html",
+        {"request": request, "app_name": APP_NAME, "users": safe_users, "roles": list(ROLE_ORDER)},
+    )
+
+
+@app.post("/users")
+async def add_user(
+    email: str = Form(...),
+    password: str = Form(...),
+    role: str = Form("Reviewer"),
+    name: str = Form(""),
+) -> RedirectResponse:
+    create_user(email=email, password=password, role=role, name=name)
+    return RedirectResponse(url="/users", status_code=303)
+
+
+@app.post("/users/update")
+async def update_user(
+    email: str = Form(...),
+    role: str = Form("Viewer"),
+    active: str = Form("true"),
+    name: str = Form(""),
+    password: str = Form(""),
+) -> RedirectResponse:
+    clean_email = normalize_email(email)
+    users = load_users()
+    user = users.get(clean_email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if role not in ROLE_ORDER:
+        raise HTTPException(status_code=400, detail="Unsupported role.")
+    if password.strip() and len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+    next_active = active == "true"
+    if user.get("role") == "Admin" and user.get("active", True) and (role != "Admin" or not next_active):
+        if active_admin_count(users) <= 1:
+            raise HTTPException(status_code=400, detail="At least one active Admin user is required.")
+    user["role"] = role
+    user["active"] = next_active
+    user["name"] = name.strip() or clean_email
+    user["updated_at"] = utc_now()
+    if password.strip():
+        user["password_hash"] = hash_password(password)
+    users[clean_email] = user
+    save_users(users)
+    return RedirectResponse(url="/users", status_code=303)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     jobs = sorted([public_job(j) for j in load_jobs().values()], key=lambda j: j.get("created_at", ""), reverse=True)
@@ -870,6 +1197,7 @@ async def issue_board(request: Request) -> HTMLResponse:
 
 @app.post("/issues/update")
 async def update_issue_board(
+    request: Request,
     board_key: str = Form(...),
     status: str = Form("Open"),
     assignee: str = Form(""),
@@ -890,6 +1218,7 @@ async def update_issue_board(
         "due_date": due_date.strip(),
         "priority": priority.strip(),
         "comment": comment.strip(),
+        "user": actor_from_request(request),
     })
     board[board_key] = {
         "status": status,
@@ -915,6 +1244,7 @@ async def inspections(request: Request) -> HTMLResponse:
 
 @app.post("/inspections")
 async def create_inspection(
+    request: Request,
     inspection_type: str = Form(...),
     inspector: str = Form(""),
     area: str = Form(""),
@@ -927,6 +1257,7 @@ async def create_inspection(
     items.append({
         "id": uuid4().hex[:10],
         "created_at": utc_now(),
+        "created_by": actor_from_request(request),
         "inspection_type": inspection_type.strip(),
         "inspector": inspector.strip(),
         "area": area.strip(),
@@ -1111,6 +1442,7 @@ async def job_status(job_id: str) -> Dict[str, Any]:
 
 @app.post("/jobs/{job_id}/issues/{issue_id}")
 async def update_issue_review(
+    request: Request,
     job_id: str,
     issue_id: str,
     status: str = Form(...),
@@ -1144,6 +1476,7 @@ async def update_issue_review(
             issue_type=issue.get("issue_type"),
             pages=issue.get("pages", []),
             comment=comment.strip(),
+            user=actor_from_request(request),
         )
         job["updated_at"] = utc_now()
         jobs[job_id] = job
@@ -1154,6 +1487,7 @@ async def update_issue_review(
 
 @app.post("/jobs/{job_id}/signoff")
 async def save_signoff(
+    request: Request,
     job_id: str,
     reviewer_name: str = Form(...),
     decision: str = Form(...),
@@ -1180,6 +1514,7 @@ async def save_signoff(
             f"{reviewer_name.strip()} signed: {decision}",
             decision=decision,
             comments=comments.strip(),
+            user=actor_from_request(request),
         )
         job["updated_at"] = utc_now()
         jobs[job_id] = job
@@ -1264,6 +1599,7 @@ async def rerun_job(background_tasks: BackgroundTasks, job_id: str) -> RedirectR
 
 @app.post("/jobs/{job_id}/replace-page")
 async def replace_page(
+    request: Request,
     background_tasks: BackgroundTasks,
     job_id: str,
     page_no: int = Form(...),
@@ -1335,6 +1671,7 @@ async def replace_page(
         backup_pdf=str(backup_input),
         replacement_pdf=str(replacement_path),
         new_packet_pdf=str(new_input),
+        user=actor_from_request(request),
     )
     update_job(job_id, audit_trail=job.get("audit_trail"))
     background_tasks.add_task(run_verification, job_id)

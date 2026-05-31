@@ -25,3 +25,5 @@ services:
         value: /var/data/sqr-verifier
       - key: SQR_CONFIG_DIR
         value: /var/data/sqr-verifier/config
+      - key: AUTH_SESSION_DAYS
+        value: "14"

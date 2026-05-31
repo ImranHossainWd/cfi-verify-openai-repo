@@ -18,6 +18,15 @@ Render-ready web app for uploading sorting-quality packet PDFs and generating:
 OPENAI_API_KEY=your_openai_api_key
 ```
 
+On first visit after deploy, the app will ask you to create the first Admin user. You can also pre-create it from Render environment variables:
+
+```text
+ADMIN_EMAIL=owner@example.com
+ADMIN_PASSWORD=choose_a_strong_password
+```
+
+After login, Admin users can manage additional users at `/users`. Roles are `Admin`, `Reviewer`, and `Viewer`.
+
 The Standard instance is configured in `render.yaml`. Uploaded/generated files, review status, corrected-page history, and runtime YAML settings are stored on a Render persistent disk mounted at `/var/data/sqr-verifier`.
 
 Runtime settings are available at `/settings`. The editor validates YAML before saving and keeps timestamped backups on the persistent disk. This changes rule behavior without narrowing the AI extraction: packet-specific values returned under `all_fields` are still auto-added to the cross-reference matrix.
