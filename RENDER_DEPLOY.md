@@ -57,6 +57,8 @@ Packet field discovery: with `FULL_PACKET_FIELD_DISCOVERY=true`, GPT-5.4 Mini re
 
 Persistent storage: the Blueprint attaches a 10 GB Render disk at `/var/data/sqr-verifier`. Only files under that path survive deploys/restarts, so keep `SQR_DATA_DIR` and `SQR_CONFIG_DIR` pointed there on the Standard instance.
 
+The same disk now also stores Food Safety Form uploads, form verification results, visual template samples, packet assignments, and workflow history. No additional Render environment variables are required for these features.
+
 ## Local Run
 
 ```bash

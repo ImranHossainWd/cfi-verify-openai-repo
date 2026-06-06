@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="detail">
+  <p class="eyebrow">Daily and monthly compliance</p>
+  <h1>Food Safety Forms</h1>
+  <p>Upload scanned forms, verify template requirements, correct problems, approve, and file.</p>
+</section>
+
+<section class="grid">
+  <article class="panel">
+    <h2>Upload scanned forms</h2>
+    {% if templates %}
+    <form action="/forms" method="post" enctype="multipart/form-data" class="mobile-form">
+      <label>Scanned PDF <input type="file" name="pdf" accept="application/pdf" required></label>
+      <label>Form type
+        <select name="template_code" required>
+          {% for item in templates %}
+          <option value="{{ item.code }}">{{ item.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Name <input name="name" placeholder="Automatically uses file name"></label>
+      <label>Period <input name="period" type="month"></label>
+      <label>Department / area <input name="department" placeholder="Food Safety, Production, Warehouse"></label>
+      <button type="submit">Verify forms</button>
+    </form>
+    {% else %}
+    <p class="empty">Create an active Food Safety template under Templates before uploading forms.</p>
+    {% endif %}
+  </article>
+  <aside class="panel">
+    <h2>Find forms</h2>
+    <form method="get" class="mobile-form">
+      <label>Search <input type="search" name="q" value="{{ query }}" placeholder="Name, type, period"></label>
+      <label>Status
+        <select name="status">
+          <option value="">All statuses</option>
+          {% for option in ["Awaiting Verification", "Needs Correction", "Approved", "Filed"] %}
+          <option value="{{ option }}" {% if selected_status == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="secondary">Filter</button>
+    </form>
+  </aside>
+</section>
+
+<section class="panel user-list-panel">
+  <div class="panel-head"><h2>Form verification queue</h2><span>{{ jobs|length }} shown</span></div>
+  <div class="job-list">
+  {% for job in jobs %}
+    <a class="job-row compact" href="/forms/{{ job.id }}">
+      <span class="status {{ job.status }}">{{ job.status }}</span>
+      <span class="job-main">
+        <strong>{{ job.name }}</strong>
+        <small>{{ job.template_label }} &middot; {{ job.period or "No period" }} &middot; {{ job.department or "No department" }}</small>
+      </span>
+      <span class="counts">{{ job.workflow_status }}</span>
+    </a>
+  {% else %}
+    <p class="empty">No scanned forms uploaded yet.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

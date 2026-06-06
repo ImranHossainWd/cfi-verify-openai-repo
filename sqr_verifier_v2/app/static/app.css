@@ -120,6 +120,12 @@ button.secondary { background: var(--ink); margin-top: 18px; }
 }
 .panel-head span { color: var(--muted); font-size: 13px; }
 .job-list { display: grid; gap: 10px; }
+.packet-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: 10px;
+  margin-bottom: 16px;
+}
 .job-row {
   display: grid;
   grid-template-columns: 96px minmax(220px, 1fr) 74px minmax(180px, .7fr);
@@ -172,6 +178,23 @@ button.secondary { background: var(--ink); margin-top: 18px; }
 .metrics strong { font-size: 24px; }
 .metrics small { color: var(--muted); font-weight: 700; }
 .subpackets, .flags, .downloads, .issue-list, .audit-list { display: grid; gap: 10px; }
+.page-directory {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+.page-directory__item {
+  min-height: 68px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  text-align: left;
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.page-directory__item:hover { border-color: var(--brand); background: #fff8f9; }
+.page-directory__item span { color: var(--muted); font-size: 12px; }
 .subpacket, .flag, .download-card {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -247,6 +270,39 @@ button.secondary { background: var(--ink); margin-top: 18px; }
 .mobile-form {
   display: grid;
   gap: 12px;
+}
+.form-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.template-summary { gap: 6px !important; }
+.region-builder {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+.region-builder .panel-head { margin-bottom: 8px; }
+.region-canvas {
+  position: relative;
+  width: 100%;
+  max-height: 620px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: #eef2f7;
+  touch-action: none;
+  cursor: crosshair;
+}
+.region-canvas img { display: block; width: 100%; height: auto; }
+.region-box {
+  position: absolute;
+  z-index: 2;
+  border: 2px solid var(--brand);
+  background: rgba(168, 34, 55, .16);
+  color: var(--brand-dark);
+  font-size: 11px;
+  font-weight: 850;
+  overflow: hidden;
 }
 .mobile-form textarea {
   min-height: 110px;
@@ -622,7 +678,7 @@ button.small,
   h1 { font-size: 30px; }
   .job-row { grid-template-columns: 1fr; }
   .metrics, .metrics--three { grid-template-columns: repeat(2, 1fr); }
-  .issue-review-form, .board-form, .user-create-form, .user-row { grid-template-columns: 1fr; }
+  .issue-review-form, .board-form, .user-create-form, .user-row, .packet-filters, .form-pair { grid-template-columns: 1fr; }
   .page-viewer { padding: 10px; }
   .page-viewer__head { flex-direction: column; }
 }

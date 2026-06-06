@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import traceback
@@ -41,7 +42,7 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-05-31-built-in-login"
+APP_VERSION = "2026-06-06-client-workflow-v2"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
@@ -53,6 +54,10 @@ BOARD_FILE = DATA_DIR / "issue_board.json"
 TEMPLATES_FILE = DATA_DIR / "form_templates.json"
 USERS_FILE = DATA_DIR / "users.json"
 SESSIONS_FILE = DATA_DIR / "sessions.json"
+FORM_JOBS_FILE = DATA_DIR / "form_jobs.json"
+FORM_UPLOAD_DIR = DATA_DIR / "form_uploads"
+FORM_OUTPUT_DIR = DATA_DIR / "form_outputs"
+TEMPLATE_SAMPLE_DIR = DATA_DIR / "template_samples"
 MONTHLY_DIR = DATA_DIR / "monthly"
 BUNDLED_CONFIG_DIR = ROOT / "config"
 CONFIG_DIR = Path(os.environ.get("SQR_CONFIG_DIR", DATA_DIR / "config")).resolve()
@@ -78,8 +83,37 @@ CONFIG_EDITABLE_FILES = {
     "customers": "customers.yaml",
     "specs": "specs.yaml",
 }
+DEFAULT_FOOD_SAFETY_TEMPLATES = {
+    "AIR_COMPRESSOR": {
+        "label": "Air Compressor Inspection",
+        "required_terms": ["Air Compressor"],
+        "require_date": True,
+        "required_signatures": 2,
+    },
+    "FORKLIFT_DAILY": {
+        "label": "Daily Forklift Inspection",
+        "required_terms": ["Forklift"],
+        "require_date": True,
+        "required_signatures": 1,
+    },
+    "SANITATION": {
+        "label": "Sanitation Inspection",
+        "required_terms": ["Sanitation"],
+        "require_date": True,
+        "required_signatures": 1,
+    },
+    "FIRST_AID": {
+        "label": "First Aid Supplies Log",
+        "required_terms": ["First Aid"],
+        "require_date": True,
+        "required_signatures": 1,
+    },
+}
 
-for directory in (DATA_DIR, UPLOAD_DIR, OUTPUT_DIR, CONFIG_DIR, MONTHLY_DIR):
+for directory in (
+    DATA_DIR, UPLOAD_DIR, OUTPUT_DIR, CONFIG_DIR, MONTHLY_DIR,
+    FORM_UPLOAD_DIR, FORM_OUTPUT_DIR, TEMPLATE_SAMPLE_DIR,
+):
     directory.mkdir(parents=True, exist_ok=True)
 for bundled_file in BUNDLED_CONFIG_DIR.glob("*.yaml"):
     runtime_file = CONFIG_DIR / bundled_file.name
@@ -289,6 +323,31 @@ def save_jobs(jobs: Dict[str, Dict[str, Any]]) -> None:
     tmp.replace(JOBS_FILE)
 
 
+def load_form_jobs() -> Dict[str, Dict[str, Any]]:
+    return load_json_file(FORM_JOBS_FILE, {})
+
+
+def save_form_jobs(jobs: Dict[str, Dict[str, Any]]) -> None:
+    save_json_file(FORM_JOBS_FILE, jobs)
+
+
+def get_form_job(form_job_id: str) -> Dict[str, Any]:
+    job = load_form_jobs().get(form_job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Form verification not found")
+    return job
+
+
+def update_form_job(form_job_id: str, **changes: Any) -> Dict[str, Any]:
+    jobs = load_form_jobs()
+    job = jobs.get(form_job_id, {})
+    job.update(changes)
+    job["updated_at"] = utc_now()
+    jobs[form_job_id] = job
+    save_form_jobs(jobs)
+    return job
+
+
 def get_job(job_id: str) -> Dict[str, Any]:
     jobs = load_jobs()
     job = jobs.get(job_id)
@@ -449,6 +508,12 @@ def get_form_templates() -> Dict[str, Dict[str, Any]]:
             "label": custom.get(code, {}).get("label", _human_form_label(code)),
             "fields": list(fields or []),
             "active": custom.get(code, {}).get("active", True),
+            "category": custom.get(code, {}).get("category", "Packet"),
+            "required_terms": custom.get(code, {}).get("required_terms", []),
+            "require_date": custom.get(code, {}).get("require_date", False),
+            "required_signatures": int(custom.get(code, {}).get("required_signatures", 0) or 0),
+            "regions": custom.get(code, {}).get("regions", []),
+            "sample_filename": custom.get(code, {}).get("sample_filename", ""),
         }
     for code, item in custom.items():
         templates.setdefault(
@@ -458,8 +523,27 @@ def get_form_templates() -> Dict[str, Dict[str, Any]]:
                 "label": item.get("label", _human_form_label(code)),
                 "fields": item.get("fields", []),
                 "active": item.get("active", True),
+                "category": item.get("category", "Packet"),
+                "required_terms": item.get("required_terms", []),
+                "require_date": item.get("require_date", False),
+                "required_signatures": int(item.get("required_signatures", 0) or 0),
+                "regions": item.get("regions", []),
+                "sample_filename": item.get("sample_filename", ""),
             },
         )
+    for code, defaults in DEFAULT_FOOD_SAFETY_TEMPLATES.items():
+        templates.setdefault(code, {
+            "code": code,
+            "label": defaults["label"],
+            "fields": [],
+            "active": True,
+            "category": "Food Safety",
+            "required_terms": defaults["required_terms"],
+            "require_date": defaults["require_date"],
+            "required_signatures": defaults["required_signatures"],
+            "regions": [],
+            "sample_filename": "",
+        })
     return dict(sorted(templates.items()))
 
 
@@ -467,19 +551,44 @@ def _human_form_label(code: str) -> str:
     return code.replace("_", " ").title()
 
 
-def save_form_template(code: str, label: str, fields_text: str, active: bool) -> None:
+def save_form_template(
+    code: str,
+    label: str,
+    fields_text: str,
+    active: bool,
+    category: str = "Packet",
+    required_terms_text: str = "",
+    require_date: bool = False,
+    required_signatures: int = 0,
+    regions_text: str = "",
+    sample_filename: str = "",
+) -> str:
     clean_code = re.sub(r"[^A-Za-z0-9_]+", "_", code.strip().upper()).strip("_")
     if not clean_code:
         raise HTTPException(status_code=400, detail="Form code is required.")
     fields = [re.sub(r"[^A-Za-z0-9_]+", "_", item.strip().lower()).strip("_")
               for item in re.split(r"[,\n]+", fields_text)]
     fields = [item for item in fields if item]
+    required_terms = [item.strip() for item in re.split(r"[,\n]+", required_terms_text) if item.strip()]
+    try:
+        regions = json.loads(regions_text or "[]")
+        if not isinstance(regions, list):
+            raise ValueError
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="Visual regions must be a JSON list.")
     templates = get_form_templates()
+    previous = templates.get(clean_code, {})
     templates[clean_code] = {
         "code": clean_code,
         "label": label.strip() or _human_form_label(clean_code),
         "fields": fields,
         "active": active,
+        "category": category if category in {"Packet", "Food Safety"} else "Packet",
+        "required_terms": required_terms,
+        "require_date": require_date,
+        "required_signatures": max(0, int(required_signatures or 0)),
+        "regions": regions,
+        "sample_filename": sample_filename or previous.get("sample_filename", ""),
     }
     save_json_file(TEMPLATES_FILE, templates)
     data = rules_config()
@@ -487,6 +596,7 @@ def save_form_template(code: str, label: str, fields_text: str, active: bool) ->
     expected = coverage.setdefault("expected_fields_by_form", {})
     expected[clean_code] = fields
     save_rules_config(data)
+    return clean_code
 
 
 def issue_board_items() -> List[Dict[str, Any]]:
@@ -674,6 +784,79 @@ def output_file_path(job: Dict[str, Any], filename: str) -> Path:
     if out_dir not in path.parents or not path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return path
+
+
+def page_catalog(job: Dict[str, Any]) -> List[Dict[str, Any]]:
+    trace_path = Path(job["output_dir"]) / f"{job['packet_name']}_trace.json"
+    if not trace_path.exists():
+        candidates = list(Path(job["output_dir"]).glob("*_trace.json"))
+        trace_path = candidates[0] if candidates else trace_path
+    trace = load_json_file(trace_path, {})
+    pages = []
+    label_counts: Dict[str, int] = {}
+    for page in trace.get("pages", []) or []:
+        page_no = int(page.get("page_no") or 0)
+        if page_no < 1:
+            continue
+        label = (
+            page.get("form_label")
+            or page.get("form_type")
+            or page.get("form_code")
+            or "Unidentified form"
+        )
+        label_counts[label] = label_counts.get(label, 0) + 1
+        pages.append({
+            "page_no": page_no,
+            "label": label,
+            "form_code": page.get("form_code") or "",
+            "display": f"Page {page_no} - {label}",
+            "occurrence": label_counts[label],
+        })
+    if not pages:
+        count = int((job.get("summary") or {}).get("page_count") or 0)
+        pages = [
+            {"page_no": page_no, "label": "Packet page", "form_code": "", "display": f"Page {page_no}"}
+            for page_no in range(1, count + 1)
+        ]
+    return pages
+
+
+def packet_workflow_counts(jobs: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = {"total": len(jobs), "pending": 0, "correction": 0, "approved": 0}
+    for job in jobs:
+        status = (job.get("workflow_status") or "AI Processing").lower()
+        if status == "approved":
+            counts["approved"] += 1
+        elif status == "correction required":
+            counts["correction"] += 1
+        else:
+            counts["pending"] += 1
+    return counts
+
+
+def derive_packet_name(report: Any, fallback: str) -> str:
+    invoice = next(
+        (str(page.fields.get("invoice_no")) for page in report.pages if page.fields.get("invoice_no")),
+        "",
+    )
+    sub_packet = report.sub_packets[0] if report.sub_packets else None
+    customer = getattr(sub_packet, "primary_customer", "") if sub_packet else ""
+    wo = getattr(sub_packet, "primary_wo", "") if sub_packet else ""
+    parts = [item for item in [invoice, customer, f"WO-{wo}" if wo else ""] if item]
+    return slugify("-".join(parts) if parts else fallback)
+
+
+def rename_job_outputs(job: Dict[str, Any], new_name: str) -> None:
+    old_name = job["packet_name"]
+    if not new_name or new_name == old_name:
+        return
+    out_dir = Path(job["output_dir"])
+    for path in list(out_dir.glob(f"{old_name}*")):
+        path.rename(path.with_name(new_name + path.name[len(old_name):]))
+    old_work = out_dir / "_work" / old_name
+    new_work = out_dir / "_work" / new_name
+    if old_work.exists() and not new_work.exists():
+        old_work.rename(new_work)
 
 
 def page_image_path(job: Dict[str, Any], page_no: int) -> Path:
@@ -960,6 +1143,146 @@ def write_audit_workbook(path: Path, month: str, jobs: List[Dict[str, Any]], ins
     wb.save(path)
 
 
+def extract_form_pdf_text(pdf_path: Path, output_dir: Path) -> List[str]:
+    import fitz
+
+    texts: List[str] = []
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with fitz.open(str(pdf_path)) as doc:
+        for index, page in enumerate(doc):
+            text = page.get_text("text").strip()
+            if len(text) < 80 and shutil.which("tesseract"):
+                image_path = output_dir / f"page-{index + 1:03d}.png"
+                page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False).save(str(image_path))
+                result = subprocess.run(
+                    [shutil.which("tesseract") or "tesseract", str(image_path), "stdout", "-l", "eng"],
+                    capture_output=True,
+                    text=True,
+                    timeout=90,
+                    check=False,
+                )
+                if result.stdout.strip():
+                    text = result.stdout.strip()
+            texts.append(text)
+    return texts
+
+
+def extract_region_text(pdf_path: Path, page_no: int, region: Dict[str, Any], output_dir: Path) -> str:
+    if not shutil.which("tesseract"):
+        return ""
+    import fitz
+
+    with fitz.open(str(pdf_path)) as doc:
+        index = max(0, min(page_no - 1, doc.page_count - 1))
+        page = doc.load_page(index)
+        rect = page.rect
+        x = float(region.get("x", 0)) * rect.width
+        y = float(region.get("y", 0)) * rect.height
+        w = float(region.get("width", 1)) * rect.width
+        h = float(region.get("height", 1)) * rect.height
+        clip = fitz.Rect(x, y, min(rect.width, x + w), min(rect.height, y + h))
+        path = output_dir / f"region-{slugify(str(region.get('label') or 'field'))}.png"
+        page.get_pixmap(matrix=fitz.Matrix(2.5, 2.5), clip=clip, alpha=False).save(str(path))
+    result = subprocess.run(
+        [shutil.which("tesseract") or "tesseract", str(path), "stdout", "-l", "eng"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    return result.stdout.strip()
+
+
+def run_form_verification(form_job_id: str) -> None:
+    job = update_form_job(form_job_id, status="running", message="Reading form pages")
+    try:
+        template = get_form_templates().get(job["template_code"])
+        if not template:
+            raise RuntimeError("The selected form template no longer exists.")
+        pdf_path = Path(job["input_path"])
+        output_dir = Path(job["output_dir"])
+        pages = extract_form_pdf_text(pdf_path, output_dir / "ocr")
+        combined = "\n".join(pages)
+        checks: List[Dict[str, Any]] = []
+        for term in template.get("required_terms", []):
+            found_pages = [index + 1 for index, text in enumerate(pages) if term.lower() in text.lower()]
+            checks.append({
+                "name": f"Required text: {term}",
+                "status": "pass" if found_pages else "fail",
+                "detail": f"Found on pages {found_pages}" if found_pages else "Not detected in the uploaded form",
+                "pages": found_pages,
+            })
+        if template.get("require_date"):
+            date_matches = re.findall(r"\b(?:\d{1,2}[/.-]){2}(?:\d{2}|\d{4})\b", combined)
+            checks.append({
+                "name": "Date present",
+                "status": "pass" if date_matches else "fail",
+                "detail": f"Detected {len(date_matches)} date value(s)" if date_matches else "No date was detected",
+                "pages": [],
+            })
+        required_signatures = int(template.get("required_signatures", 0) or 0)
+        if required_signatures:
+            signature_hits = len(re.findall(r"\b(?:signature|signed|verified by|initials?)\b", combined, flags=re.I))
+            checks.append({
+                "name": "Signature/verification coverage",
+                "status": "pass" if signature_hits >= required_signatures else "fail",
+                "detail": f"Detected {signature_hits}; template requires {required_signatures}",
+                "pages": [],
+            })
+        for region in template.get("regions", []):
+            if not region.get("required", True):
+                continue
+            region_text = extract_region_text(
+                pdf_path,
+                int(region.get("page", 1) or 1),
+                region,
+                output_dir / "regions",
+            )
+            checks.append({
+                "name": f"Required region: {region.get('label') or 'Unnamed region'}",
+                "status": "pass" if region_text.strip() else "fail",
+                "detail": f"Detected: {region_text[:180]}" if region_text.strip() else "The selected page region appears blank or unreadable",
+                "pages": [int(region.get("page", 1) or 1)],
+            })
+        if not checks:
+            checks.append({
+                "name": "Readable form",
+                "status": "pass" if combined.strip() else "fail",
+                "detail": f"Read {len(combined)} characters across {len(pages)} page(s)",
+                "pages": list(range(1, len(pages) + 1)),
+            })
+        failures = [item for item in checks if item["status"] == "fail"]
+        result = {
+            "overall": "FAIL" if failures else "PASS",
+            "pass_count": sum(1 for item in checks if item["status"] == "pass"),
+            "fail_count": len(failures),
+            "page_count": len(pages),
+            "checks": checks,
+        }
+        save_json_file(output_dir / "verification.json", result)
+        with (output_dir / "issues.csv").open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["Status", "Check", "Detail", "Pages"])
+            for item in failures:
+                writer.writerow(["FLAG", item["name"], item["detail"], ",".join(map(str, item["pages"]))])
+        update_form_job(
+            form_job_id,
+            status="complete",
+            workflow_status="Manual Review Pending",
+            completed_at=utc_now(),
+            result=result,
+            message="Form verification complete",
+        )
+    except Exception as exc:  # noqa: BLE001
+        update_form_job(
+            form_job_id,
+            status="failed",
+            completed_at=utc_now(),
+            message=str(exc),
+            error_trace=traceback.format_exc(),
+        )
+
+
 def run_verification(job_id: str) -> None:
     job = update_job(job_id, status="running", started_at=utc_now(), message="Rendering and OCR are in progress")
     try:
@@ -977,6 +1300,10 @@ def run_verification(job_id: str) -> None:
             vision_cache_path=cache_path,
             packet_name=job["packet_name"],
         )
+        if not job.get("packet_name_user_supplied"):
+            automatic_name = derive_packet_name(report, job["packet_name"])
+            rename_job_outputs(job, automatic_name)
+            job = update_job(job_id, packet_name=automatic_name)
         vision_errors = [
             note
             for page in report.pages
@@ -1002,6 +1329,7 @@ def run_verification(job_id: str) -> None:
         final_job = update_job(
             job_id,
             status="complete",
+            workflow_status="Manual Review Pending",
             completed_at=utc_now(),
             message="Verification complete with OCR warnings" if warnings else "Verification complete",
             summary=summary,
@@ -1154,8 +1482,33 @@ async def update_user(
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
+async def index(
+    request: Request,
+    q: str = "",
+    workflow: str = "",
+    assignee: str = "",
+) -> HTMLResponse:
     jobs = sorted([public_job(j) for j in load_jobs().values()], key=lambda j: j.get("created_at", ""), reverse=True)
+    query = q.strip().lower()
+    if query:
+        jobs = [
+            job for job in jobs
+            if query in " ".join([
+                str(job.get("packet_name", "")),
+                str(job.get("original_filename", "")),
+                str((job.get("summary") or {}).get("sub_packets", "")),
+                str(job.get("assignee", "")),
+            ]).lower()
+        ]
+    if workflow:
+        jobs = [job for job in jobs if (job.get("workflow_status") or "AI Processing") == workflow]
+    if assignee:
+        jobs = [job for job in jobs if (job.get("assignee") or "") == assignee]
+    users = [
+        {k: v for k, v in item.items() if k != "password_hash"}
+        for item in load_users().values()
+        if item.get("active", True) and item.get("role") in {"Admin", "Reviewer"}
+    ]
     return templates.TemplateResponse(
         "index.html",
         {
@@ -1165,6 +1518,11 @@ async def index(request: Request) -> HTMLResponse:
             "default_provider": DEFAULT_VISION_PROVIDER,
             "providers": PROVIDERS,
             "max_upload_mb": MAX_UPLOAD_MB,
+            "query": q,
+            "workflow": workflow,
+            "assignee": assignee,
+            "reviewers": sorted(users, key=lambda item: item.get("email", "")),
+            "workflow_counts": packet_workflow_counts(jobs),
         },
     )
 
@@ -1270,6 +1628,133 @@ async def create_inspection(
     return RedirectResponse(url="/inspections", status_code=303)
 
 
+@app.get("/forms", response_class=HTMLResponse)
+async def food_safety_forms(request: Request, q: str = "", status: str = "") -> HTMLResponse:
+    jobs = sorted(load_form_jobs().values(), key=lambda item: item.get("created_at", ""), reverse=True)
+    query = q.strip().lower()
+    if query:
+        jobs = [
+            item for item in jobs
+            if query in " ".join([
+                str(item.get("name", "")),
+                str(item.get("original_filename", "")),
+                str(item.get("template_label", "")),
+                str(item.get("period", "")),
+            ]).lower()
+        ]
+    if status:
+        jobs = [item for item in jobs if (item.get("workflow_status") or item.get("status")) == status]
+    form_templates = [
+        item for item in get_form_templates().values()
+        if item.get("active", True) and item.get("category") == "Food Safety"
+    ]
+    return templates.TemplateResponse(
+        "forms.html",
+        {
+            "request": request,
+            "app_name": APP_NAME,
+            "jobs": jobs,
+            "templates": form_templates,
+            "query": q,
+            "selected_status": status,
+        },
+    )
+
+
+@app.post("/forms")
+async def create_food_safety_form(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    pdf: UploadFile = File(...),
+    template_code: str = Form(...),
+    name: str = Form(""),
+    period: str = Form(""),
+    department: str = Form(""),
+) -> RedirectResponse:
+    if not pdf.filename or not pdf.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Upload a PDF form.")
+    template = get_form_templates().get(template_code)
+    if not template or template.get("category") != "Food Safety":
+        raise HTTPException(status_code=400, detail="Select a Food Safety form template.")
+    form_job_id = uuid4().hex[:12]
+    input_path = FORM_UPLOAD_DIR / f"{form_job_id}_{slugify(pdf.filename)}.pdf"
+    output_dir = FORM_OUTPUT_DIR / form_job_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    size = 0
+    with input_path.open("wb") as handle:
+        while chunk := await pdf.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_UPLOAD_MB * 1024 * 1024:
+                input_path.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail=f"PDF exceeds {MAX_UPLOAD_MB} MB.")
+            handle.write(chunk)
+    job = {
+        "id": form_job_id,
+        "name": name.strip() or slugify(pdf.filename),
+        "original_filename": pdf.filename,
+        "template_code": template_code,
+        "template_label": template.get("label"),
+        "period": period.strip(),
+        "department": department.strip(),
+        "input_path": str(input_path),
+        "output_dir": str(output_dir),
+        "status": "queued",
+        "workflow_status": "Awaiting Verification",
+        "message": "Queued for form verification",
+        "created_by": actor_from_request(request),
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+    }
+    update_form_job(form_job_id, **job)
+    background_tasks.add_task(run_form_verification, form_job_id)
+    return RedirectResponse(url=f"/forms/{form_job_id}", status_code=303)
+
+
+@app.get("/forms/{form_job_id}", response_class=HTMLResponse)
+async def food_safety_form_detail(request: Request, form_job_id: str) -> HTMLResponse:
+    job = get_form_job(form_job_id)
+    return templates.TemplateResponse(
+        "form_job.html",
+        {"request": request, "app_name": APP_NAME, "job": job},
+    )
+
+
+@app.post("/forms/{form_job_id}/workflow")
+async def update_food_safety_form_workflow(
+    request: Request,
+    form_job_id: str,
+    workflow_status: str = Form(...),
+    reviewer_comment: str = Form(""),
+) -> RedirectResponse:
+    allowed = {"Awaiting Scan", "Awaiting Verification", "Needs Correction", "Approved", "Filed"}
+    if workflow_status not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported form workflow status.")
+    job = get_form_job(form_job_id)
+    history = list(job.get("history") or [])
+    history.append({
+        "at": utc_now(),
+        "user": actor_from_request(request),
+        "status": workflow_status,
+        "comment": reviewer_comment.strip(),
+    })
+    update_form_job(
+        form_job_id,
+        workflow_status=workflow_status,
+        reviewer_comment=reviewer_comment.strip(),
+        history=history[-50:],
+    )
+    return RedirectResponse(url=f"/forms/{form_job_id}", status_code=303)
+
+
+@app.get("/forms/{form_job_id}/file")
+async def food_safety_form_file(form_job_id: str) -> FileResponse:
+    job = get_form_job(form_job_id)
+    path = Path(job["input_path"]).resolve()
+    if FORM_UPLOAD_DIR.resolve() not in path.parents or not path.exists():
+        raise HTTPException(status_code=404, detail="Form file not found")
+    return FileResponse(path, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{path.name}"'})
+
+
 @app.get("/templates", response_class=HTMLResponse)
 async def form_templates(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -1284,9 +1769,56 @@ async def save_template(
     label: str = Form(""),
     fields: str = Form(""),
     active: str = Form("true"),
+    category: str = Form("Packet"),
+    required_terms: str = Form(""),
+    require_date: str = Form("false"),
+    required_signatures: int = Form(0),
+    regions: str = Form("[]"),
+    sample_pdf: Optional[UploadFile] = File(None),
 ) -> RedirectResponse:
-    save_form_template(code, label, fields, active == "true")
+    sample_filename = ""
+    clean_code = re.sub(r"[^A-Za-z0-9_]+", "_", code.strip().upper()).strip("_")
+    if sample_pdf and sample_pdf.filename:
+        if not sample_pdf.filename.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Template sample must be a PDF.")
+        sample_path = TEMPLATE_SAMPLE_DIR / f"{clean_code}.pdf"
+        with sample_path.open("wb") as handle:
+            while chunk := await sample_pdf.read(1024 * 1024):
+                handle.write(chunk)
+        sample_filename = sample_path.name
+    save_form_template(
+        code, label, fields, active == "true",
+        category=category,
+        required_terms_text=required_terms,
+        require_date=require_date == "true",
+        required_signatures=required_signatures,
+        regions_text=regions,
+        sample_filename=sample_filename,
+    )
     return RedirectResponse(url="/templates", status_code=303)
+
+
+@app.get("/templates/sample/{code}")
+async def template_sample(code: str) -> FileResponse:
+    item = get_form_templates().get(code)
+    if not item or not item.get("sample_filename"):
+        raise HTTPException(status_code=404, detail="Template sample not found")
+    path = (TEMPLATE_SAMPLE_DIR / item["sample_filename"]).resolve()
+    if TEMPLATE_SAMPLE_DIR.resolve() not in path.parents or not path.exists():
+        raise HTTPException(status_code=404, detail="Template sample not found")
+    return FileResponse(path, media_type="application/pdf")
+
+
+@app.get("/templates/sample/{code}/page.png")
+async def template_sample_page(code: str) -> FileResponse:
+    item = get_form_templates().get(code)
+    if not item or not item.get("sample_filename"):
+        raise HTTPException(status_code=404, detail="Template sample not found")
+    pdf_path = (TEMPLATE_SAMPLE_DIR / item["sample_filename"]).resolve()
+    if TEMPLATE_SAMPLE_DIR.resolve() not in pdf_path.parents or not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="Template sample not found")
+    image_path = render_pdf_page_to_png(pdf_path, 0, TEMPLATE_SAMPLE_DIR / f"{code}.png")
+    return FileResponse(image_path, media_type="image/png")
 
 
 @app.get("/audit", response_class=HTMLResponse)
@@ -1389,11 +1921,15 @@ async def create_job(
     job = {
         "id": job_id,
         "packet_name": safe_name,
+        "packet_name_user_supplied": bool(packet_name.strip()),
         "original_filename": pdf.filename,
         "input_path": str(input_path),
         "output_dir": str(output_dir),
         "vision_provider": provider,
         "status": "queued",
+        "workflow_status": "AI Processing",
+        "assignee": "",
+        "due_date": "",
         "message": "Queued for verification",
         "created_at": utc_now(),
         "updated_at": utc_now(),
@@ -1416,8 +1952,47 @@ async def job_detail(request: Request, job_id: str) -> HTMLResponse:
             "job": job,
             "files": output_files(job),
             "app_name": APP_NAME,
+            "pages": page_catalog(job),
+            "reviewers": sorted(
+                [
+                    {k: v for k, v in item.items() if k != "password_hash"}
+                    for item in load_users().values()
+                    if item.get("active", True) and item.get("role") in {"Admin", "Reviewer"}
+                ],
+                key=lambda item: item.get("email", ""),
+            ),
         },
     )
+
+
+@app.post("/jobs/{job_id}/workflow")
+async def update_job_workflow(
+    request: Request,
+    job_id: str,
+    workflow_status: str = Form("Manual Review Pending"),
+    assignee: str = Form(""),
+    due_date: str = Form(""),
+) -> RedirectResponse:
+    allowed = {"AI Processing", "Manual Review Pending", "Correction Required", "Approved", "Filed"}
+    if workflow_status not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported workflow status.")
+    job = get_job(job_id)
+    audit_event(
+        job,
+        "workflow_updated",
+        f"Workflow set to {workflow_status}",
+        user=actor_from_request(request),
+        assignee=assignee.strip(),
+        due_date=due_date.strip(),
+    )
+    update_job(
+        job_id,
+        workflow_status=workflow_status,
+        assignee=assignee.strip(),
+        due_date=due_date.strip(),
+        audit_trail=job.get("audit_trail"),
+    )
+    return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
 
 
 @app.get("/jobs/{job_id}/fields", response_class=HTMLResponse)
@@ -1559,6 +2134,27 @@ async def page_image(job_id: str, page_no: int) -> FileResponse:
     job = get_job(job_id)
     path = page_image_path(job, page_no)
     return FileResponse(path, media_type="image/png")
+
+
+@app.get("/jobs/{job_id}/page/{page_no}.pdf")
+async def page_pdf(job_id: str, page_no: int) -> FileResponse:
+    if page_no < 1:
+        raise HTTPException(status_code=404, detail="Page not found")
+    from pypdf import PdfReader, PdfWriter
+
+    job = get_job(job_id)
+    source = PdfReader(job["input_path"])
+    if page_no > len(source.pages):
+        raise HTTPException(status_code=404, detail="Page not found")
+    page_dir = Path(job["output_dir"]) / "page_exports"
+    page_dir.mkdir(parents=True, exist_ok=True)
+    path = page_dir / f"{job['packet_name']}_page_{page_no:03d}.pdf"
+    if not path.exists():
+        writer = PdfWriter()
+        writer.add_page(source.pages[page_no - 1])
+        with path.open("wb") as handle:
+            writer.write(handle)
+    return FileResponse(path, media_type="application/pdf", filename=path.name)
 
 
 @app.get("/jobs/{job_id}/compare/{event_id}/{side}.png")

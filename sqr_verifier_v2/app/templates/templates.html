@@ -3,24 +3,48 @@
 <section class="detail">
   <p class="eyebrow">Visual rule builder</p>
   <h1>Form templates</h1>
-  <p>Add or edit expected fields for a form type. New packet-specific fields are still auto-discovered even if they are not listed here.</p>
+  <p>Configure packet or food-safety forms while preserving automatic discovery of unique packet fields.</p>
 </section>
 
 <section class="grid">
   <article class="panel">
     <h2>Add / update template</h2>
-    <form action="/templates" method="post" class="mobile-form">
-      <label>Form code <input name="code" placeholder="COA, SQR_XC, NEW_FORM" required></label>
-      <label>Display label <input name="label" placeholder="Certificate of Analysis"></label>
-      <label>Expected fields
-        <textarea name="fields" placeholder="wo, po, customer, product, dates"></textarea>
-      </label>
-      <label>Active
-        <select name="active">
-          <option value="true">Yes</option>
-          <option value="false">No</option>
+    <form id="templateForm" action="/templates" method="post" enctype="multipart/form-data" class="mobile-form">
+      <label>Form code <input id="templateCode" name="code" placeholder="AIR_COMPRESSOR, COA" required></label>
+      <label>Display label <input id="templateLabel" name="label" placeholder="Air Compressor Inspection"></label>
+      <label>Category
+        <select id="templateCategory" name="category">
+          <option>Packet</option>
+          <option>Food Safety</option>
         </select>
       </label>
+      <label>Expected extracted fields
+        <textarea id="templateFields" name="fields" placeholder="date, inspector, supervisor_signature"></textarea>
+      </label>
+      <label>Required printed text
+        <textarea id="templateTerms" name="required_terms" placeholder="Air Compressor Inspection, Verification"></textarea>
+      </label>
+      <div class="form-pair">
+        <label>Date required
+          <select id="templateDate" name="require_date"><option value="false">No</option><option value="true">Yes</option></select>
+        </label>
+        <label>Required signature labels
+          <input id="templateSignatures" name="required_signatures" type="number" min="0" value="0">
+        </label>
+      </div>
+      <label>Completed sample PDF
+        <input name="sample_pdf" type="file" accept="application/pdf">
+      </label>
+      <label>Active
+        <select id="templateActive" name="active"><option value="true">Yes</option><option value="false">No</option></select>
+      </label>
+      <input id="templateRegions" name="regions" type="hidden" value="[]">
+      <div id="regionBuilder" class="region-builder" hidden>
+        <div class="panel-head"><h3>Required visual regions</h3><button id="clearRegions" type="button" class="small">Clear</button></div>
+        <p class="hint">Drag over a required area on the sample. Give each selected area a label.</p>
+        <div id="regionCanvas" class="region-canvas"><img id="regionImage" alt="Template sample page"></div>
+        <div id="regionList" class="audit-list"></div>
+      </div>
       <button type="submit">Save template</button>
     </form>
   </article>
@@ -29,12 +53,109 @@
     <h2>Current templates</h2>
     <div class="audit-list">
     {% for item in templates %}
-      <div>
+      <div class="template-summary">
         <strong>{{ item.code }} &middot; {{ item.label }}</strong>
-        <small>{{ item.fields|join(", ") }}</small>
+        <small>{{ item.category }} &middot; {{ "Active" if item.active else "Inactive" }}</small>
+        <small>Fields: {{ item.fields|join(", ") or "None configured" }}</small>
+        <small>Required text: {{ item.required_terms|join(", ") or "None" }}</small>
+        <small>{{ item.required_signatures }} signature label(s) &middot; {{ item.regions|length }} visual region(s)</small>
+        <button
+          type="button"
+          class="secondary small template-edit"
+          data-template='{{ item|tojson }}'
+        >Edit rules</button>
       </div>
     {% endfor %}
     </div>
   </aside>
 </section>
+
+<script>
+const fields = {
+  code: document.getElementById("templateCode"),
+  label: document.getElementById("templateLabel"),
+  category: document.getElementById("templateCategory"),
+  expected: document.getElementById("templateFields"),
+  terms: document.getElementById("templateTerms"),
+  date: document.getElementById("templateDate"),
+  signatures: document.getElementById("templateSignatures"),
+  active: document.getElementById("templateActive"),
+  regions: document.getElementById("templateRegions")
+};
+const builder = document.getElementById("regionBuilder");
+const canvas = document.getElementById("regionCanvas");
+const image = document.getElementById("regionImage");
+const regionList = document.getElementById("regionList");
+let regions = [];
+
+function renderRegions() {
+  canvas.querySelectorAll(".region-box").forEach((node) => node.remove());
+  regionList.innerHTML = "";
+  regions.forEach((region, index) => {
+    const box = document.createElement("div");
+    box.className = "region-box";
+    box.style.left = `${region.x * 100}%`;
+    box.style.top = `${region.y * 100}%`;
+    box.style.width = `${region.width * 100}%`;
+    box.style.height = `${region.height * 100}%`;
+    box.textContent = region.label;
+    canvas.appendChild(box);
+    const row = document.createElement("div");
+    row.innerHTML = `<strong>${region.label}</strong><small>Page ${region.page || 1}</small>`;
+    regionList.appendChild(row);
+  });
+  fields.regions.value = JSON.stringify(regions);
+}
+
+document.querySelectorAll(".template-edit").forEach((button) => {
+  button.addEventListener("click", () => {
+    const item = JSON.parse(button.dataset.template);
+    fields.code.value = item.code;
+    fields.label.value = item.label;
+    fields.category.value = item.category || "Packet";
+    fields.expected.value = (item.fields || []).join(", ");
+    fields.terms.value = (item.required_terms || []).join(", ");
+    fields.date.value = item.require_date ? "true" : "false";
+    fields.signatures.value = item.required_signatures || 0;
+    fields.active.value = item.active ? "true" : "false";
+    regions = item.regions || [];
+    if (item.sample_filename) {
+      builder.hidden = false;
+      image.src = `/templates/sample/${item.code}/page.png`;
+    } else {
+      builder.hidden = true;
+      image.removeAttribute("src");
+    }
+    renderRegions();
+    document.getElementById("templateForm").scrollIntoView({behavior: "smooth"});
+  });
+});
+
+let start = null;
+canvas.addEventListener("pointerdown", (event) => {
+  if (!image.src) return;
+  const rect = image.getBoundingClientRect();
+  start = {x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height};
+});
+canvas.addEventListener("pointerup", (event) => {
+  if (!start || !image.src) return;
+  const rect = image.getBoundingClientRect();
+  const end = {x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height};
+  const label = window.prompt("Region label", "Required field");
+  if (label) {
+    regions.push({
+      label,
+      page: 1,
+      required: true,
+      x: Math.max(0, Math.min(start.x, end.x)),
+      y: Math.max(0, Math.min(start.y, end.y)),
+      width: Math.min(1, Math.abs(end.x - start.x)),
+      height: Math.min(1, Math.abs(end.y - start.y))
+    });
+    renderRegions();
+  }
+  start = null;
+});
+document.getElementById("clearRegions").addEventListener("click", () => { regions = []; renderRegions(); });
+</script>
 {% endblock %}

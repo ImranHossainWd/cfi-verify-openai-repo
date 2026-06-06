@@ -70,3 +70,64 @@ customers:
     requires_trailer_inspection: true
     is_backup_source_only: true   # If detected, treat as backup-source not primary
     notes: "Often appears as the original-run source for extra-case orders."
+
+  - canonical: "Taza Trading"
+    aliases: ["Taza Trading", "Taza Trading Inc", "Taza Trading, Inc."]
+    customer_code: ""
+    co_packer_route: false
+    requires_bol: true
+    requires_trailer_inspection: true
+    notes: "Legal suffix variations are equivalent."
+
+  - canonical: "Torn Glasser"
+    aliases: ["Torn Glasser", "Torn Glasser Inc", "Tom Glaser", "Tom Glaser Inc"]
+    customer_code: ""
+    co_packer_route: false
+    requires_bol: true
+    requires_trailer_inspection: true
+    notes: "Includes common OCR/name variants from reviewed packets."
+
+  - canonical: "Capitol Food Co"
+    aliases:
+      - "Capitol Food Co"
+      - "Capitol Food Co LLC"
+      - "Capitol Food Company"
+      - "Capitol Food Company - Fresca Warehouse"
+      - "Capital Food Co"
+      - "Capital Food Co."
+      - "Capitol Foods Co"
+    customer_code: ""
+    co_packer_route: false
+    requires_bol: true
+    requires_trailer_inspection: true
+    notes: "Reviewed legal, warehouse, and OCR variants."
+
+  - canonical: "Bella Viva Orchards"
+    aliases:
+      - "Bella Viva Orchards"
+      - "Bella Viva Orchards Inc"
+      - "Bella Viva Orchards, Inc."
+      - "Bella Viva"
+      - "Bella Viva Distribution"
+    customer_code: ""
+    co_packer_route: false
+    requires_bol: true
+    requires_trailer_inspection: true
+    notes: "Reviewed legal and distribution-name variants."
+
+  - canonical: "TropiCon Foods"
+    aliases:
+      - "TropiCon Foods"
+      - "TropiCon Foods Inc"
+      - "TropiCon Foods, Inc."
+      - "TropiCon Foods, Inc. (A.M.S.)"
+      - "Tropicon"
+      - "Tropican"
+      - "Tropic Foods Inc"
+      - "Tropicool Foods Inc"
+      - "TopCon Foods Inc"
+    customer_code: ""
+    co_packer_route: false
+    requires_bol: true
+    requires_trailer_inspection: true
+    notes: "Reviewed OCR variants; supporting-form customer roles still require context."

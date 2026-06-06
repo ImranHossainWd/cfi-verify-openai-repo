@@ -48,6 +48,23 @@
       {% endfor %}
       </div>
 
+      {% if pages %}
+        <h3>Packet pages</h3>
+        <div class="page-directory">
+        {% for page in pages %}
+          <button
+            type="button"
+            class="page-directory__item"
+            data-page-open="{{ page.page_no }}"
+            data-page-label="{{ page.label }}"
+          >
+            <strong>Page {{ page.page_no }}</strong>
+            <span>{{ page.label }}</span>
+          </button>
+        {% endfor %}
+        </div>
+      {% endif %}
+
       {% if job.summary.issues %}
         <h3 id="review-queue">Review queue</h3>
         <div class="issue-list">
@@ -131,6 +148,29 @@
     </form>
     <a class="secondary-link" href="/jobs/{{ job.id }}/fields">Field confidence</a>
 
+    <h3>Packet workflow</h3>
+    <form action="/jobs/{{ job.id }}/workflow" method="post" class="replace-page-form">
+      <label>Status
+        <select name="workflow_status">
+          {% for option in ["AI Processing", "Manual Review Pending", "Correction Required", "Approved", "Filed"] %}
+          <option value="{{ option }}" {% if (job.workflow_status or "AI Processing") == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Assigned reviewer
+        <select name="assignee">
+          <option value="">Unassigned</option>
+          {% for reviewer in reviewers %}
+          <option value="{{ reviewer.email }}" {% if job.assignee == reviewer.email %}selected{% endif %}>{{ reviewer.name or reviewer.email }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Due date
+        <input name="due_date" type="date" value="{{ job.due_date or '' }}">
+      </label>
+      <button type="submit" class="secondary">Save workflow</button>
+    </form>
+
     <h3 id="review-signoff">Reviewer sign-off</h3>
     {% if job.review_signoff %}
       <div class="signoff-card">
@@ -159,8 +199,13 @@
 
     <h3>Replace corrected page</h3>
     <form action="/jobs/{{ job.id }}/replace-page" method="post" enctype="multipart/form-data" class="replace-page-form">
-      <label>Page number
-        <input name="page_no" type="number" min="1" required>
+      <label>Page to replace
+        <select name="page_no" required>
+          <option value="">Select a bookmarked page</option>
+          {% for page in pages %}
+          <option value="{{ page.page_no }}">{{ page.display }}</option>
+          {% endfor %}
+        </select>
       </label>
       <label>Corrected page PDF
         <input name="replacement_pdf" type="file" accept="application/pdf" required>
@@ -199,7 +244,10 @@
         <h2 id="viewerTitle">Page review</h2>
         <p id="viewerDetail"></p>
       </div>
-      <button type="button" class="icon-button" data-close-viewer aria-label="Close page viewer">x</button>
+      <div class="viewer-actions">
+        <a id="viewerPagePdf" class="download-action" href="#" target="_blank">Open / print page</a>
+        <button type="button" class="icon-button" data-close-viewer aria-label="Close page viewer">x</button>
+      </div>
     </div>
     <div id="viewerPages" class="page-tabs"></div>
     <div class="page-viewer__body">
@@ -257,6 +305,7 @@ const viewerTitle = document.getElementById("viewerTitle");
 const viewerDetail = document.getElementById("viewerDetail");
 const viewerPages = document.getElementById("viewerPages");
 const viewerImage = document.getElementById("viewerImage");
+const viewerPagePdf = document.getElementById("viewerPagePdf");
 
 function showFlagPage(flagName, flagDetail, pages) {
   if (!pages || pages.length === 0) return;
@@ -268,6 +317,7 @@ function showFlagPage(flagName, flagDetail, pages) {
   function selectPage(pageNo, button) {
     viewerImage.src = `/jobs/${activeJobId}/page/${pageNo}.png`;
     viewerImage.alt = `Packet page ${pageNo} for ${flagName}`;
+    viewerPagePdf.href = `/jobs/${activeJobId}/page/${pageNo}.pdf`;
     viewerPages.querySelectorAll("button").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
   }
@@ -281,6 +331,16 @@ function showFlagPage(flagName, flagDetail, pages) {
     if (index === 0) selectPage(pageNo, button);
   });
 }
+
+document.querySelectorAll("[data-page-open]").forEach((button) => {
+  button.addEventListener("click", () => {
+    showFlagPage(
+      button.dataset.pageLabel || `Page ${button.dataset.pageOpen}`,
+      "Packet page preview",
+      [Number(button.dataset.pageOpen)]
+    );
+  });
+});
 
 document.querySelectorAll(".issue-open").forEach((button) => {
   button.addEventListener("click", () => {

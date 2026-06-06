@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import csv
+import difflib
 import json
 import os
 import re
@@ -273,6 +274,52 @@ def normalize_po(po: str) -> str:
     # strip surrounding whitespace then squash all internal whitespace+hyphens
     s = re.sub(r"[\s\-_]+", "", s).upper()
     return s.lstrip("0")
+
+
+LEGAL_SUFFIXES = {
+    "inc", "incorporated", "llc", "ltd", "limited", "company", "co", "corp",
+    "corporation", "the",
+}
+
+
+def normalize_company_name(value: str) -> str:
+    text = re.sub(r"\bc\s*/\s*o\b.*$", "", str(value or ""), flags=re.I)
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    while words and words[-1] in LEGAL_SUFFIXES:
+        words.pop()
+    return "".join(words)
+
+
+def customer_equivalent(a: str, b: str, config: Config) -> bool:
+    if not a or not b:
+        return False
+    pa = config.find_customer(a)
+    pb = config.find_customer(b)
+    if pa and pb and pa.canonical == pb.canonical:
+        return True
+    na, nb = normalize_company_name(a), normalize_company_name(b)
+    if not na or not nb:
+        return False
+    if na == nb:
+        return True
+    # Conservative OCR tolerance for longer company names only.
+    return min(len(na), len(nb)) >= 8 and difflib.SequenceMatcher(None, na, nb).ratio() >= 0.90
+
+
+def normalize_carrier(value: str) -> str:
+    text = re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+    if not text or text == "carrier":
+        return ""
+    if "fedex" in text or "fed ex" in text:
+        return "fedex"
+    if "best" in text and ("overnite" in text or "overnight" in text):
+        return "best overnite"
+    if "ups" in text:
+        return "ups"
+    return " ".join(
+        word for word in text.split()
+        if word not in {"freight", "ground", "priority", "express", "service", "systems"}
+    )
 
 
 def normalize_date(s: str) -> Optional[str]:
@@ -961,6 +1008,15 @@ def determine_primary_values(sp: SubPacket) -> None:
     if cases_counter: sp.cases           = cases_counter.most_common(1)[0][0]
 
 
+SUPPORTING_CONTEXT_FORMS = {
+    "SQR_FULL", "LAB", "SORT_FIND", "PHOTO", "CONTAINER", "LMD", "CMD",
+    "PRETEST", "BIN_TAG", "PULL", "XC_USED", "SORT_OUT", "STAMP", "DAILY", "UNK",
+}
+PRIMARY_ORDER_WO_FORMS = {"INV", "PO", "PROD_REQ", "COA", "FPP", "BOL", "TRAILER", "SQR_CHK"}
+CASE_BASELINE_FORMS = {"PROD_REQ", "COA", "SQR_CHK"}
+CASE_CONTEXT_FORMS = SUPPORTING_CONTEXT_FORMS | {"SQR_XC"}
+
+
 def _is_no_new_wo_xc_used(page: PageRecord) -> bool:
     if page.form_code != "XC_USED":
         return False
@@ -1015,6 +1071,8 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
         known_wos = set()
         for p in sp.pages:
             if p.fields.get("is_backup_source"):
+                continue
+            if p.form_code not in PRIMARY_ORDER_WO_FORMS:
                 continue
             if p.fields.get("wo"):
                 known_wos.add(p.fields["wo"])
@@ -1132,19 +1190,27 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
         if sp.primary_customer:
             for p in sp.pages:
                 pc = p.fields.get("customer")
-                if pc and pc == sp.primary_customer:
+                if pc and customer_equivalent(pc, sp.primary_customer, config):
                     src = cross_ref_summary(crm, "customer", p.page_no)
                     sp.checks.append(CheckResult(
                         f"Customer on {p.form_label} (p{p.page_no})",
                         "pass",
                         f"Customer = {pc} ✓" + (f" — {src}" if src else ""),
                         [p.page_no], sub_packet=sp.index))
-                elif pc and pc != sp.primary_customer:
+                elif pc and not customer_equivalent(pc, sp.primary_customer, config):
                     if p.fields.get("is_backup_source"):
                         sp.checks.append(CheckResult(
                             f"Customer on {p.form_label} (p{p.page_no})",
                             "info",
                             f"{pc} — backup source for extra-case order, not an error",
+                            [p.page_no], sub_packet=sp.index))
+                    elif p.form_code in SUPPORTING_CONTEXT_FORMS:
+                        sp.checks.append(CheckResult(
+                            f"Customer on {p.form_label} (p{p.page_no})",
+                            "info",
+                            f"{pc} appears on a supporting/shared form. Confirm the "
+                            f"order-specific highlighted row or source context; it is "
+                            f"not treated as the buyer automatically.",
                             [p.page_no], sub_packet=sp.index))
                     else:
                         sp.checks.append(CheckResult(
@@ -1204,7 +1270,12 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
         for p in sp.pages:
             wo = p.fields.get("wo")
             cs = p.fields.get("cases")
-            if wo and cs is not None and p.form_code not in ORDER_LEVEL_FORMS:
+            if (
+                wo and cs is not None
+                and p.form_code in CASE_BASELINE_FORMS
+                and not p.fields.get("is_backup_source")
+                and (not known_wos or wo in known_wos)
+            ):
                 cases_by_wo.setdefault(wo, Counter())[round(cs)] += 1
         # Primary case count per WO = most common
         primary_cases_per_wo = {
@@ -1222,6 +1293,16 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
             page_cases = round(p.fields["cases"])
             page_wo    = p.fields.get("wo")
 
+            if p.form_code in CASE_CONTEXT_FORMS:
+                sp.checks.append(CheckResult(
+                    f"Case count on {p.form_label} (p{p.page_no})",
+                    "info",
+                    f"{page_cases} cs is contextual inventory/source data on "
+                    f"{p.form_label}; validate its highlighted row or calculation "
+                    f"instead of comparing it directly with the shipped order total.",
+                    [p.page_no], sub_packet=sp.index))
+                continue
+
             # Order-level forms: case count should be the SUM of WO counts
             if p.form_code in ORDER_LEVEL_FORMS:
                 if order_total_cases is None:
@@ -1237,6 +1318,20 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                         "pass",
                         f"{page_cases} cs ✓ — equals order-level sum of WO totals "
                         f"({' + '.join(str(c) for c in primary_cases_per_wo.values())} = {order_total_cases})",
+                        [p.page_no], sub_packet=sp.index))
+                elif page_cases in set(primary_cases_per_wo.values()):
+                    sp.checks.append(CheckResult(
+                        f"Case count on {p.form_label} (p{p.page_no})",
+                        "pass",
+                        f"{page_cases} cs matches an individual WO total. The form "
+                        f"does not appear to be an aggregate order total.",
+                        [p.page_no], sub_packet=sp.index))
+                elif p.form_code in {"BOL", "TRAILER"} and page_cases <= 2:
+                    sp.checks.append(CheckResult(
+                        f"Case count on {p.form_label} (p{p.page_no})",
+                        "info",
+                        f"OCR read {page_cases} cs on a carrier/shipping form; this "
+                        f"looks like a package/line count rather than the order total.",
                         [p.page_no], sub_packet=sp.index))
                 else:
                     sp.checks.append(CheckResult(
@@ -1360,7 +1455,8 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
     # PRIMARY_QC_FORMS now defined as a module-level constant (see top of file).
 
     def _cross_match_field(field_key: str, label: str, severity: str = "fail",
-                            restrict_to: Optional[set] = None):
+                            restrict_to: Optional[set] = None,
+                            normalizer=None):
         # When a sub-packet has multiple WOs (Pedrick: 1 Checkoff covers 4
         # WOs), each WO has its own COA / SQR Extra-Case / etc. with
         # legitimately different moisture / sulfur / crop year. Cross-match
@@ -1376,6 +1472,10 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
             v = p.fields.get(field_key)
             if v is None:
                 continue
+            if normalizer is not None:
+                v = normalizer(v)
+                if not v:
+                    continue
             page_wo = p.fields.get("wo") or "_no_wo_"
             groups.setdefault(page_wo, {}).setdefault(v, []).append(p.page_no)
         # Run a separate cross-match per WO group
@@ -1405,7 +1505,11 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
     _cross_match_field("moisture_pct", "Moisture",  restrict_to=PRIMARY_QC_FORMS)
     _cross_match_field("sulfur_ppm",   "Sulfur ppm", restrict_to=PRIMARY_QC_FORMS)
     _cross_match_field("crop_year",    "Crop year",  restrict_to=PRIMARY_QC_FORMS)
-    _cross_match_field("carrier",      "Carrier")    # carrier should match across BOL/Trailer/FedEx label — no restriction
+    _cross_match_field(
+        "carrier", "Carrier",
+        restrict_to={"BOL", "TRAILER", "SHIP_LABEL"},
+        normalizer=normalize_carrier,
+    )
 
     # 8. Total weight calculation: cases × lbs/case = total_lbs (per page)
     if rules_cfg.get("numerical_reconciliation", {}).get("enabled", True):
@@ -1414,6 +1518,15 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
             ulb  = p.fields.get("unit_lbs")
             tot  = p.fields.get("total_lbs")
             if cs is not None and ulb is not None:
+                if p.form_code in CASE_CONTEXT_FORMS:
+                    sp.checks.append(CheckResult(
+                        f"Total weight calc on {p.form_label} (p{p.page_no})",
+                        "info",
+                        f"{p.form_label} contains contextual/source quantities. "
+                        f"Review the highlighted row before treating its arithmetic "
+                        f"as the current order total.",
+                        [p.page_no], sub_packet=sp.index))
+                    continue
                 expected = round(cs * ulb, 2)
                 if tot is None:
                     sp.checks.append(CheckResult(

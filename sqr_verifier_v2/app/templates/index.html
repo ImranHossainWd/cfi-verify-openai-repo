@@ -6,16 +6,13 @@
     <h1>Upload a sorting-quality packet and receive the marked review package.</h1>
   </div>
   <form class="upload" action="/jobs" method="post" enctype="multipart/form-data">
-    <label>
-      Packet PDF
+    <label>Packet PDF
       <input type="file" name="pdf" accept="application/pdf" required>
     </label>
-    <label>
-      Packet name
-      <input type="text" name="packet_name" placeholder="Olive Nation WO 11392">
+    <label>Packet name <span class="hint">(optional)</span>
+      <input type="text" name="packet_name" placeholder="Automatically uses the PDF name">
     </label>
-    <label>
-      Vision OCR
+    <label>Vision OCR
       <select name="vision_provider">
         {% for provider in providers %}
           <option value="{{ provider }}" {% if provider == default_provider %}selected{% endif %}>{{ provider }}</option>
@@ -23,15 +20,31 @@
       </select>
     </label>
     <button type="submit">Run Verification</button>
-    <p class="hint">Max upload: {{ max_upload_mb }} MB. Use mock for cached demos; use Anthropic/OpenAI for production handwriting OCR.</p>
+    <p class="hint">Max upload: {{ max_upload_mb }} MB. OpenAI is recommended for production handwriting OCR.</p>
   </form>
 </section>
 
 <section class="panel">
   <div class="panel-head">
     <h2>Recent packets</h2>
-    <span>{{ jobs|length }} total</span>
+    <span>{{ jobs|length }} shown</span>
   </div>
+  <form method="get" action="/" class="packet-filters">
+    <input type="search" name="q" value="{{ query }}" placeholder="Search packet, file, WO, PO, customer">
+    <select name="workflow">
+      <option value="">All workflow statuses</option>
+      {% for option in ["AI Processing", "Manual Review Pending", "Correction Required", "Approved", "Filed"] %}
+      <option value="{{ option }}" {% if workflow == option %}selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+    <select name="assignee">
+      <option value="">All reviewers</option>
+      {% for reviewer in reviewers %}
+      <option value="{{ reviewer.email }}" {% if assignee == reviewer.email %}selected{% endif %}>{{ reviewer.name or reviewer.email }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Filter</button>
+  </form>
   {% if jobs %}
     <div class="job-list">
       {% for job in jobs %}
@@ -39,11 +52,12 @@
         <span class="status {{ job.status }}">{{ job.status }}</span>
         <span class="job-main">
           <strong>{{ job.packet_name }}</strong>
-          <small>{{ job.original_filename }} · {{ job.created_at }}</small>
+          <small>{{ job.original_filename }} &middot; {{ job.created_at }}</small>
+          <small>{{ job.workflow_status or "AI Processing" }}{% if job.assignee %} &middot; {{ job.assignee }}{% endif %}</small>
         </span>
         {% if job.summary %}
           <span class="score {{ job.summary.overall|lower }}">{{ job.summary.overall }}</span>
-          <span class="counts">{{ job.summary.pass_count }} pass · {{ job.summary.fail_count }} flags</span>
+          <span class="counts">{{ job.summary.pass_count }} pass &middot; {{ job.summary.fail_count }} flags</span>
         {% else %}
           <span class="counts">{{ job.message }}</span>
         {% endif %}
@@ -51,7 +65,7 @@
       {% endfor %}
     </div>
   {% else %}
-    <p class="empty">No packets uploaded yet.</p>
+    <p class="empty">No packets match these filters.</p>
   {% endif %}
 </section>
 {% endblock %}

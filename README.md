@@ -33,4 +33,23 @@ Runtime settings are available at `/settings`. The editor validates YAML before 
 
 The default OpenAI vision model is `gpt-5.4-mini`. `FULL_PACKET_FIELD_DISCOVERY=true` makes GPT-5.4 Mini read every page first, so packet-specific fields from `all_fields` are flattened into the cross-reference matrix automatically. Tesseract still runs on every page as a fallback.
 
+## Current Workflow Features
+
+- Search, filter, assign, and track packet review status.
+- Open, print, or replace any detected bookmarked page.
+- Conservative customer/carrier normalization based on reviewed client runs.
+- Separate Food Safety Forms workspace for scanned daily/monthly forms.
+- Visual form-template regions plus required text, date, and signature rules.
+- Client regression analysis:
+
+```text
+python scripts/run_client_regression.py --samples "../Clients run packets"
+```
+
+- Rule normalization tests:
+
+```text
+python -m unittest sqr_verifier_v2.tests.test_rule_normalization -v
+```
+
 See `RENDER_DEPLOY.md` for more details.

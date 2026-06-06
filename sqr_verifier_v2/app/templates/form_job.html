@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="detail">
+  <a class="back" href="/forms">Back to forms</a>
+  <div class="title-row">
+    <div>
+      <p class="eyebrow">{{ job.template_label }}</p>
+      <h1>{{ job.name }}</h1>
+      <p>{{ job.period or "No period" }} &middot; {{ job.department or "No department" }}</p>
+    </div>
+    <span class="status {{ job.status }}">{{ job.status }}</span>
+  </div>
+</section>
+<section class="grid">
+  <article class="panel">
+    <div class="panel-head"><h2>Verification</h2><span>{{ job.message }}</span></div>
+    {% if job.result %}
+    <div class="metrics metrics--three">
+      <div><strong>{{ job.result.overall }}</strong><small>Overall</small></div>
+      <div><strong>{{ job.result.pass_count }}</strong><small>Pass</small></div>
+      <div><strong>{{ job.result.fail_count }}</strong><small>Flags</small></div>
+    </div>
+    <div class="issue-list">
+      {% for check in job.result.checks %}
+      <article class="issue-card {{ check.status }}">
+        <strong>{{ check.name }}</strong>
+        <span>{{ check.detail }}</span>
+        {% if check.pages %}<small>Pages: {{ check.pages|join(", ") }}</small>{% endif %}
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty">The form is {{ job.status }}.</p>
+    {% endif %}
+  </article>
+  <aside class="panel">
+    <a class="secondary-link" href="/forms/{{ job.id }}/file" target="_blank">Open scanned PDF</a>
+    <h3>Review workflow</h3>
+    <form action="/forms/{{ job.id }}/workflow" method="post" class="mobile-form">
+      <label>Status
+        <select name="workflow_status">
+          {% for option in ["Awaiting Scan", "Awaiting Verification", "Needs Correction", "Approved", "Filed"] %}
+          <option value="{{ option }}" {% if job.workflow_status == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Reviewer comment <textarea name="reviewer_comment">{{ job.reviewer_comment or "" }}</textarea></label>
+      <button type="submit">Save review</button>
+    </form>
+    {% if job.history %}
+    <h3>History</h3>
+    <div class="audit-list">
+      {% for event in job.history|reverse %}
+      <div><strong>{{ event.status }}</strong><small>{{ event.at }} &middot; {{ event.user }}</small><small>{{ event.comment }}</small></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </aside>
+</section>
+{% endblock %}
