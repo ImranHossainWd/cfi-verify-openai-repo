@@ -45,7 +45,7 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-06-07-compliance-workflow-v3"
+APP_VERSION = "2026-06-07-dashboard-shell-v4"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
@@ -80,6 +80,7 @@ FULL_PACKET_FIELD_DISCOVERY = os.environ.get("FULL_PACKET_FIELD_DISCOVERY", "").
     "on",
 }
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "150"))
+MAX_CONCURRENT_PACKET_RUNS = max(1, int(os.environ.get("MAX_CONCURRENT_PACKET_RUNS", "1")))
 PROVIDERS = ["openai", "anthropic", "mock"]
 RESOLVED_ISSUE_STATUSES = {"Accepted as Is", "False Positive", "Resolved"}
 SESSION_COOKIE = "sqr_session"
@@ -133,6 +134,7 @@ app = FastAPI(title=APP_NAME)
 app.mount("/static", StaticFiles(directory=ROOT / "app" / "static"), name="static")
 templates = Jinja2Templates(directory=ROOT / "app" / "templates")
 jobs_lock = threading.Lock()
+packet_run_semaphore = threading.Semaphore(MAX_CONCURRENT_PACKET_RUNS)
 
 
 def utc_now() -> str:
@@ -1542,6 +1544,13 @@ def run_form_verification(form_job_id: str) -> None:
 
 
 def run_verification(job_id: str) -> None:
+    if not packet_run_semaphore.acquire(blocking=False):
+        update_job(
+            job_id,
+            status="queued",
+            message=f"Waiting for another packet to finish. Limit is {MAX_CONCURRENT_PACKET_RUNS} active packet run(s).",
+        )
+        packet_run_semaphore.acquire()
     job = update_job(job_id, status="running", started_at=utc_now(), message="Rendering and OCR are in progress")
     try:
         provider = job["vision_provider"]
@@ -1615,6 +1624,8 @@ def run_verification(job_id: str) -> None:
             url=f"/jobs/{job_id}",
             kind="error",
         )
+    finally:
+        packet_run_semaphore.release()
 
 
 @app.get("/setup", response_class=HTMLResponse)

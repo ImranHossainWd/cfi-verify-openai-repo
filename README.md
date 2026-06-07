@@ -29,6 +29,8 @@ After login, Admin users can manage additional users at `/users`. Roles are `Adm
 
 The Standard instance is configured in `render.yaml`. Uploaded/generated files, review status, corrected-page history, and runtime YAML settings are stored on a Render persistent disk mounted at `/var/data/sqr-verifier`.
 
+`MAX_CONCURRENT_PACKET_RUNS=1` is set for Render Standard so only one packet verification runs at a time. Additional uploads stay queued until the active run finishes.
+
 ## Compliance Workflow
 
 - Packet pages are collapsed behind a Bookmarks button.

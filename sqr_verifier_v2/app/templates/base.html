@@ -4,45 +4,46 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ app_name }}</title>
-  <link rel="stylesheet" href="/static/app.css?v=20260607-compliance-workflow-v3">
+  <link rel="stylesheet" href="/static/app.css?v=20260607-dashboard-shell-v4">
   <style>
     body { margin: 0; background: #f6f8fb; color: #152033; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 18px 32px; background: #fff; border-bottom: 1px solid #dce3ec; }
-    .brand { display: flex; align-items: center; gap: 14px; color: inherit; text-decoration: none; }
-    .brand span { display: grid; gap: 2px; }
+    .app-shell { min-height: 100vh; display: grid; grid-template-columns: 282px minmax(0, 1fr); }
+    .app-main { min-width: 0; }
+    .sidebar { position: sticky; top: 0; height: 100vh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 18px; padding: 20px 16px; background: #fff; border-right: 1px solid #dce3ec; }
+    .topbar { display: none; justify-content: space-between; align-items: center; gap: 14px; padding: 14px 18px; background: #fff; border-bottom: 1px solid #dce3ec; }
+    .brand { display: flex; align-items: center; gap: 14px; color: inherit; text-decoration: none; min-width: 0; }
+    .brand span { display: grid; gap: 2px; min-width: 0; }
     .brand small { color: #607086; }
+    .brand strong, .brand small { overflow-wrap: anywhere; }
     .logo { width: 46px; height: 46px; max-width: 46px; max-height: 46px; object-fit: contain; }
     .menu-toggle { display: none; width: auto; border: 1px solid #dce3ec; border-radius: 8px; padding: 9px 11px; background: #fff; color: #152033; font-weight: 850; }
-    .nav-links { display: flex; gap: 18px; color: #607086; font-weight: 650; }
-    .nav-links a { color: inherit; text-decoration: none; }
-    .user-pill { border: 1px solid #dce3ec; border-radius: 999px; padding: 8px 10px; color: #152033; font-size: 12px; }
+    .nav-links { display: grid; align-content: start; gap: 6px; color: #43536b; font-weight: 750; overflow: auto; }
+    .nav-group-title { padding: 14px 10px 3px; color: #8a97aa; font-size: 11px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+    .nav-links a { display: flex; align-items: center; min-height: 38px; padding: 9px 10px; border-radius: 8px; color: inherit; text-decoration: none; }
+    .nav-links a:hover { background: #f6f8fb; color: #152033; }
+    .account-box { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid #edf1f5; }
+    .user-pill { border: 1px solid #dce3ec; border-radius: 8px; padding: 9px 10px; color: #152033; font-size: 12px; overflow-wrap: anywhere; }
+    .logout-link { color: #a82237; font-weight: 850; padding: 8px 10px; text-decoration: none; }
     .nav-backdrop { display: none; }
     main { max-width: 1240px; margin: 0 auto; padding: 32px; }
-    @media (max-width: 820px) {
-      .topbar { flex-direction: row; align-items: center; padding: 14px 18px; }
-      .brand { min-width: 0; }
-      .brand span { min-width: 0; }
-      .brand strong, .brand small { overflow-wrap: anywhere; }
+    body.auth-layout .app-shell { display: block; }
+    body.auth-layout .sidebar { display: none; }
+    body.auth-layout .topbar { display: flex; }
+    @media (max-width: 980px) {
+      .app-shell { display: block; }
+      .topbar { display: flex; }
       .menu-toggle { display: inline-flex; }
-      .nav-links {
+      .sidebar {
         position: fixed;
         inset: 0 0 0 auto;
         z-index: 70;
-        width: min(300px, 86vw);
-        display: grid;
-        align-content: start;
-        gap: 8px;
-        padding: 82px 20px 20px;
-        background: #fff;
-        border-left: 1px solid #dce3ec;
-        box-shadow: -18px 0 46px rgba(10, 20, 38, .18);
+        width: min(315px, 86vw);
+        height: 100vh;
         transform: translateX(105%);
         transition: transform .18s ease;
+        box-shadow: -18px 0 46px rgba(10, 20, 38, .18);
       }
-      .nav-links a { padding: 12px 10px; border-radius: 8px; color: #152033; }
-      .user-pill { border-radius: 8px; padding: 12px 10px; }
-      .nav-links a:hover { background: #f6f8fb; }
-      body.nav-open .nav-links { transform: translateX(0); }
+      body.nav-open .sidebar { transform: translateX(0); }
       .nav-backdrop {
         position: fixed;
         inset: 0;
@@ -51,46 +52,67 @@
         background: rgba(10, 20, 38, .42);
       }
       body.nav-open .nav-backdrop { display: block; }
+      main { padding: 20px; }
     }
   </style>
 </head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="/">
-      <img src="/static/logo.svg" alt="" class="logo">
-      <span>
-        <strong>California Fruit</strong>
-        <small>OpenAI Sorting Quality Verifier</small>
-      </span>
-    </a>
-    <button type="button" class="menu-toggle" id="menuToggle" aria-controls="siteNav" aria-expanded="false">Menu</button>
-    <nav class="nav-links" id="siteNav">
-      {% if request.state.user %}
-      <a href="/">Packets</a>
-      <a href="/issues">Issues</a>
-      <a href="/forms">Food Safety Forms</a>
-      <a href="/inspections">Mobile Forms</a>
-      <a href="/audit">Audit Prep</a>
-      <a href="/notifications">Notifications</a>
-      {% if request.state.user.role == "Admin" %}
-      <a href="/templates">Templates</a>
-      <a href="/learned-rules">False-positive Rules</a>
-      <a href="/backups">Backups</a>
-      <a href="/settings">Settings</a>
-      <a href="/users">Users</a>
-      {% endif %}
-      <a href="/healthz">Health</a>
-      <span class="user-pill">{{ request.state.user.email }} · {{ request.state.user.role }}</span>
-      <a href="/logout">Log out</a>
-      {% else %}
-      <a href="/login">Log in</a>
-      {% endif %}
-    </nav>
-  </header>
+<body class="{{ 'auth-layout' if not request.state.user else '' }}">
   <div class="nav-backdrop" id="navBackdrop"></div>
-  <main>
-    {% block content %}{% endblock %}
-  </main>
+  <div class="app-shell">
+    {% if request.state.user %}
+    <aside class="sidebar" id="siteNav">
+      <a class="brand" href="/">
+        <img src="/static/logo.svg" alt="" class="logo">
+        <span>
+          <strong>California Fruit</strong>
+          <small>OpenAI Sorting Quality Verifier</small>
+        </span>
+      </a>
+      <nav class="nav-links">
+        <span class="nav-group-title">Workspace</span>
+        <a href="/">Packets</a>
+        <a href="/issues">Issues</a>
+        <a href="/forms">Food Safety Forms</a>
+        <a href="/inspections">Mobile Forms</a>
+        <a href="/audit">Audit Prep</a>
+        <a href="/notifications">Notifications</a>
+        {% if request.state.user.role == "Admin" %}
+        <span class="nav-group-title">Admin</span>
+        <a href="/templates">Templates</a>
+        <a href="/learned-rules">False-positive Rules</a>
+        <a href="/backups">Backups</a>
+        <a href="/settings">Settings</a>
+        <a href="/users">Users</a>
+        {% endif %}
+        <span class="nav-group-title">System</span>
+        <a href="/healthz">Health</a>
+      </nav>
+      <div class="account-box">
+        <span class="user-pill">{{ request.state.user.email }} &middot; {{ request.state.user.role }}</span>
+        <a class="logout-link" href="/logout">Log out</a>
+      </div>
+    </aside>
+    {% endif %}
+    <div class="app-main">
+      <header class="topbar">
+        <a class="brand" href="/">
+          <img src="/static/logo.svg" alt="" class="logo">
+          <span>
+            <strong>California Fruit</strong>
+            <small>OpenAI Sorting Quality Verifier</small>
+          </span>
+        </a>
+        {% if request.state.user %}
+        <button type="button" class="menu-toggle" id="menuToggle" aria-controls="siteNav" aria-expanded="false">Menu</button>
+        {% else %}
+        <a href="/login">Log in</a>
+        {% endif %}
+      </header>
+      <main>
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
   <script>
     const menuToggle = document.getElementById("menuToggle");
     const navBackdrop = document.getElementById("navBackdrop");
