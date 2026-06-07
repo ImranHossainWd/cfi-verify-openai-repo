@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="detail">
+  <p class="eyebrow">Admin data protection</p>
+  <h1>Backups</h1>
+  <p>{{ "External backup delivery is configured." if external_enabled else "Archives stay on the Render persistent disk until BACKUP_WEBHOOK_URL is configured." }}</p>
+</section>
+<section class="panel">
+  <form action="/backups" method="post"><button type="submit">Create backup now</button></form>
+  <div class="audit-list backup-list">
+  {% for backup in backups %}
+    <div><strong>{{ backup.name }}</strong><small>{{ (backup.size / 1048576)|round(2) }} MB</small><a href="/backups/{{ backup.name }}">Download</a></div>
+  {% else %}
+    <p class="empty">No backup archives yet.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

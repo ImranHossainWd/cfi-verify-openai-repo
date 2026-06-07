@@ -14,7 +14,10 @@ import csv
 import hashlib
 import hmac
 import secrets
+import smtplib
+import zipfile
 from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -42,7 +45,7 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-06-06-client-workflow-v2"
+APP_VERSION = "2026-06-07-compliance-workflow-v3"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
@@ -59,6 +62,11 @@ FORM_UPLOAD_DIR = DATA_DIR / "form_uploads"
 FORM_OUTPUT_DIR = DATA_DIR / "form_outputs"
 TEMPLATE_SAMPLE_DIR = DATA_DIR / "template_samples"
 MONTHLY_DIR = DATA_DIR / "monthly"
+PRODUCTION_CALENDAR_FILE = DATA_DIR / "production_calendar.json"
+LEARNED_RULES_FILE = DATA_DIR / "learned_rules.json"
+NOTIFICATIONS_FILE = DATA_DIR / "notifications.json"
+BACKUPS_DIR = DATA_DIR / "backups"
+FORM_FILING_DIR = DATA_DIR / "filed_forms"
 BUNDLED_CONFIG_DIR = ROOT / "config"
 CONFIG_DIR = Path(os.environ.get("SQR_CONFIG_DIR", DATA_DIR / "config")).resolve()
 VISION_CACHE = Path(os.environ.get("VISION_CACHE_PATH", ROOT / "cache" / "vision_cache.json")).resolve()
@@ -112,7 +120,8 @@ DEFAULT_FOOD_SAFETY_TEMPLATES = {
 
 for directory in (
     DATA_DIR, UPLOAD_DIR, OUTPUT_DIR, CONFIG_DIR, MONTHLY_DIR,
-    FORM_UPLOAD_DIR, FORM_OUTPUT_DIR, TEMPLATE_SAMPLE_DIR,
+    FORM_UPLOAD_DIR, FORM_OUTPUT_DIR, TEMPLATE_SAMPLE_DIR, BACKUPS_DIR,
+    FORM_FILING_DIR,
 ):
     directory.mkdir(parents=True, exist_ok=True)
 for bundled_file in BUNDLED_CONFIG_DIR.glob("*.yaml"):
@@ -310,7 +319,9 @@ def safe_next_path(next_url: str) -> str:
 
 
 def route_min_role(path: str, method: str) -> str:
-    if path.startswith(("/settings", "/templates", "/users", "/diagnostics")):
+    if path.startswith(("/settings", "/templates", "/users", "/diagnostics", "/learned-rules", "/backups")):
+        return "Admin"
+    if method.upper() == "POST" and path.endswith("/delete"):
         return "Admin"
     if method.upper() == "POST":
         return "Reviewer"
@@ -365,6 +376,105 @@ def update_job(job_id: str, **changes: Any) -> Dict[str, Any]:
         jobs[job_id] = job
         save_jobs(jobs)
     return job
+
+
+def add_notification(
+    title: str,
+    detail: str,
+    *,
+    recipient: str = "",
+    url: str = "",
+    kind: str = "info",
+) -> Dict[str, Any]:
+    items = load_json_file(NOTIFICATIONS_FILE, [])
+    item = {
+        "id": uuid4().hex[:12],
+        "title": title,
+        "detail": detail,
+        "recipient": normalize_email(recipient) if recipient else "",
+        "url": url,
+        "kind": kind,
+        "read_by": [],
+        "created_at": utc_now(),
+    }
+    items.append(item)
+    save_json_file(NOTIFICATIONS_FILE, items[-1000:])
+    if recipient and os.environ.get("SMTP_HOST"):
+        try:
+            message = EmailMessage()
+            message["Subject"] = f"{APP_NAME}: {title}"
+            message["From"] = os.environ.get("SMTP_FROM", os.environ.get("SMTP_USER", ""))
+            message["To"] = recipient
+            message.set_content(f"{detail}\n\n{url}".strip())
+            port = int(os.environ.get("SMTP_PORT", "587"))
+            with smtplib.SMTP(os.environ["SMTP_HOST"], port, timeout=20) as server:
+                if os.environ.get("SMTP_STARTTLS", "true").lower() in {"1", "true", "yes"}:
+                    server.starttls()
+                if os.environ.get("SMTP_USER"):
+                    server.login(os.environ["SMTP_USER"], os.environ.get("SMTP_PASSWORD", ""))
+                server.send_message(message)
+        except Exception:
+            pass
+    return item
+
+
+def user_notifications(user: Dict[str, Any]) -> List[Dict[str, Any]]:
+    email = normalize_email(user.get("email", ""))
+    is_admin = user.get("role") == "Admin"
+    return [
+        item for item in reversed(load_json_file(NOTIFICATIONS_FILE, []))
+        if not item.get("recipient") or item.get("recipient") == email or (is_admin and item.get("recipient") == "admin")
+    ]
+
+
+def production_calendar() -> Dict[str, Any]:
+    return load_json_file(PRODUCTION_CALENDAR_FILE, {"non_production_dates": {}, "notes": {}})
+
+
+def auto_file_form(job: Dict[str, Any]) -> Path:
+    period = (job.get("period") or datetime.now().strftime("%Y-%m")).strip()
+    year, month = (period.split("-", 1) + ["unknown"])[:2]
+    target_dir = FORM_FILING_DIR / slugify(year) / slugify(month) / slugify(job.get("template_code", "form"))
+    target_dir.mkdir(parents=True, exist_ok=True)
+    source = Path(job["input_path"])
+    target = target_dir / f"{job['id']}_{slugify(source.name)}"
+    shutil.copy2(source, target)
+    output_dir = Path(job["output_dir"])
+    for filename in ("verification.json", "issues.csv"):
+        artifact = output_dir / filename
+        if artifact.exists():
+            shutil.copy2(artifact, target_dir / f"{job['id']}_{filename}")
+    update_form_job(job["id"], filed_path=str(target), filed_at=utc_now())
+    return target
+
+
+def create_backup_archive() -> Path:
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    archive = BACKUPS_DIR / f"sqr-backup-{timestamp}.zip"
+    excluded = {BACKUPS_DIR.resolve(), SESSIONS_FILE.resolve()}
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as handle:
+        for path in DATA_DIR.rglob("*"):
+            resolved = path.resolve()
+            if not path.is_file() or resolved == SESSIONS_FILE.resolve():
+                continue
+            if BACKUPS_DIR.resolve() in resolved.parents:
+                continue
+            handle.write(path, path.relative_to(DATA_DIR))
+    webhook = os.environ.get("BACKUP_WEBHOOK_URL", "").strip()
+    if webhook:
+        request = urllib.request.Request(
+            webhook,
+            data=archive.read_bytes(),
+            headers={
+                "Content-Type": "application/zip",
+                "X-Backup-Filename": archive.name,
+                **({"Authorization": f"Bearer {os.environ['BACKUP_WEBHOOK_TOKEN']}"} if os.environ.get("BACKUP_WEBHOOK_TOKEN") else {}),
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=180):
+            pass
+    return archive
 
 
 def issue_key(job_id: str, issue: Dict[str, Any]) -> str:
@@ -514,6 +624,9 @@ def get_form_templates() -> Dict[str, Dict[str, Any]]:
             "required_signatures": int(custom.get(code, {}).get("required_signatures", 0) or 0),
             "regions": custom.get(code, {}).get("regions", []),
             "sample_filename": custom.get(code, {}).get("sample_filename", ""),
+            "frequency": custom.get(code, {}).get("frequency", "As needed"),
+            "tracking_enabled": custom.get(code, {}).get("tracking_enabled", False),
+            "related_templates": custom.get(code, {}).get("related_templates", []),
         }
     for code, item in custom.items():
         templates.setdefault(
@@ -529,6 +642,9 @@ def get_form_templates() -> Dict[str, Dict[str, Any]]:
                 "required_signatures": int(item.get("required_signatures", 0) or 0),
                 "regions": item.get("regions", []),
                 "sample_filename": item.get("sample_filename", ""),
+                "frequency": item.get("frequency", "As needed"),
+                "tracking_enabled": item.get("tracking_enabled", False),
+                "related_templates": item.get("related_templates", []),
             },
         )
     for code, defaults in DEFAULT_FOOD_SAFETY_TEMPLATES.items():
@@ -543,6 +659,9 @@ def get_form_templates() -> Dict[str, Dict[str, Any]]:
             "required_signatures": defaults["required_signatures"],
             "regions": [],
             "sample_filename": "",
+            "frequency": "Daily" if code == "FORKLIFT_DAILY" else "Monthly",
+            "tracking_enabled": True,
+            "related_templates": [],
         })
     return dict(sorted(templates.items()))
 
@@ -562,6 +681,9 @@ def save_form_template(
     required_signatures: int = 0,
     regions_text: str = "",
     sample_filename: str = "",
+    frequency: str = "As needed",
+    tracking_enabled: bool = False,
+    related_templates_text: str = "",
 ) -> str:
     clean_code = re.sub(r"[^A-Za-z0-9_]+", "_", code.strip().upper()).strip("_")
     if not clean_code:
@@ -589,6 +711,13 @@ def save_form_template(
         "required_signatures": max(0, int(required_signatures or 0)),
         "regions": regions,
         "sample_filename": sample_filename or previous.get("sample_filename", ""),
+        "frequency": frequency if frequency in {"Daily", "Weekly", "Monthly", "As needed"} else "As needed",
+        "tracking_enabled": tracking_enabled,
+        "related_templates": [
+            re.sub(r"[^A-Za-z0-9_]+", "_", item.strip().upper()).strip("_")
+            for item in re.split(r"[,\n]+", related_templates_text)
+            if item.strip()
+        ],
     }
     save_json_file(TEMPLATES_FILE, templates)
     data = rules_config()
@@ -597,6 +726,57 @@ def save_form_template(
     expected[clean_code] = fields
     save_rules_config(data)
     return clean_code
+
+
+def missing_form_expectations(month: str) -> List[Dict[str, Any]]:
+    try:
+        start = datetime.strptime(month, "%Y-%m").date().replace(day=1)
+    except ValueError:
+        start = datetime.now().date().replace(day=1)
+        month = start.strftime("%Y-%m")
+    next_month = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    jobs = list(load_form_jobs().values())
+    calendar = production_calendar()
+    closed = set(calendar.get("non_production_dates", {}))
+    missing: List[Dict[str, Any]] = []
+    for template in get_form_templates().values():
+        if template.get("category") != "Food Safety" or not template.get("active", True) or not template.get("tracking_enabled"):
+            continue
+        frequency = template.get("frequency", "As needed")
+        expected: List[str] = []
+        cursor = start
+        if frequency == "Daily":
+            while cursor < next_month:
+                date_key = cursor.isoformat()
+                if cursor.weekday() < 5 and date_key not in closed:
+                    expected.append(date_key)
+                cursor += timedelta(days=1)
+        elif frequency == "Weekly":
+            while cursor < next_month:
+                if cursor.weekday() == 0 and cursor.isoformat() not in closed:
+                    expected.append(cursor.isoformat())
+                cursor += timedelta(days=1)
+        elif frequency == "Monthly":
+            expected.append(month)
+        for due in expected:
+            found = any(
+                job.get("template_code") == template["code"]
+                and (
+                    job.get("form_date") == due
+                    or job.get("period") == due
+                    or (frequency in {"Daily", "Weekly"} and str(job.get("period", "")).startswith(month)
+                        and due in str(job.get("name", "")))
+                )
+                for job in jobs
+            )
+            if not found:
+                missing.append({
+                    "template_code": template["code"],
+                    "template_label": template["label"],
+                    "frequency": frequency,
+                    "due": due,
+                })
+    return missing
 
 
 def issue_board_items() -> List[Dict[str, Any]]:
@@ -653,6 +833,28 @@ def issue_type(name: str, detail: str) -> str:
     return "Review"
 
 
+def approved_false_positive_rule(check: Any, report: Any) -> Optional[Dict[str, Any]]:
+    name = re.sub(r"\(p\d+\)", "(p#)", check.name.lower())
+    detail = check.detail.lower()
+    for rule in load_json_file(LEARNED_RULES_FILE, []):
+        if rule.get("status") != "Approved":
+            continue
+        if rule.get("name_pattern") and rule["name_pattern"] not in name:
+            continue
+        if rule.get("detail_pattern") and rule["detail_pattern"] not in detail:
+            continue
+        form_code = rule.get("form_code")
+        if form_code:
+            page_codes = {
+                page.form_code for page in report.pages
+                if page.page_no in (check.pages or [])
+            }
+            if form_code not in page_codes:
+                continue
+        return rule
+    return None
+
+
 def render_pdf_page_to_png(pdf_path: Path, page_index: int, output_path: Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists():
@@ -687,6 +889,13 @@ def build_issues(report: Any, existing_reviews: Optional[Dict[str, Dict[str, Any
             ]
         )
         review = reviews.get(stable_key, {})
+        learned_rule = approved_false_positive_rule(check, report)
+        if learned_rule and not review:
+            review = {
+                "status": "False Positive",
+                "comment": f"Automatically resolved by approved rule {learned_rule.get('id')}.",
+                "updated_at": utc_now(),
+            }
         severity = "High"
         issues.append(
             {
@@ -702,6 +911,7 @@ def build_issues(report: Any, existing_reviews: Optional[Dict[str, Dict[str, Any
                 "sub_packet": None if check.sub_packet is None else check.sub_packet + 1,
                 "comment": review.get("comment", ""),
                 "updated_at": review.get("updated_at"),
+                "learned_rule_id": learned_rule.get("id") if learned_rule else "",
             }
         )
     return issues
@@ -1193,6 +1403,25 @@ def extract_region_text(pdf_path: Path, page_no: int, region: Dict[str, Any], ou
     return result.stdout.strip()
 
 
+def interpret_region(region: Dict[str, Any], text: str) -> tuple[str, str]:
+    kind = str(region.get("interpretation") or "nonblank").lower()
+    expected = str(region.get("expected") or "").strip()
+    clean = text.strip()
+    if kind == "date":
+        ok = bool(re.search(r"\b(?:\d{1,2}[/.-]){2}(?:\d{2}|\d{4})\b", clean))
+        return ("pass" if ok else "fail", f"Date detected: {clean[:120]}" if ok else "No date detected in the highlighted region")
+    if kind in {"signature", "initials"}:
+        ink_like = len(re.sub(r"[^A-Za-z]", "", clean)) >= 2
+        return ("pass" if ink_like else "fail", f"Signature/initials detected: {clean[:120]}" if ink_like else "Signature region appears blank or unreadable")
+    if kind == "checkbox":
+        ok = bool(re.search(r"(?:\b(?:yes|no|ok|pass|fail|checked)\b|[xX✓✔])", clean, re.I))
+        return ("pass" if ok else "fail", f"Marked choice detected: {clean[:120]}" if ok else "No marked checkbox/choice detected")
+    if kind == "text" and expected:
+        ok = expected.lower() in clean.lower()
+        return ("pass" if ok else "fail", f"Expected text found: {expected}" if ok else f"Expected text not found: {expected}")
+    return ("pass" if clean else "fail", f"Detected: {clean[:180]}" if clean else "The highlighted page region appears blank or unreadable")
+
+
 def run_form_verification(form_job_id: str) -> None:
     job = update_form_job(form_job_id, status="running", message="Reading form pages")
     try:
@@ -1238,12 +1467,34 @@ def run_form_verification(form_job_id: str) -> None:
                 region,
                 output_dir / "regions",
             )
+            status, detail = interpret_region(region, region_text)
             checks.append({
                 "name": f"Required region: {region.get('label') or 'Unnamed region'}",
-                "status": "pass" if region_text.strip() else "fail",
-                "detail": f"Detected: {region_text[:180]}" if region_text.strip() else "The selected page region appears blank or unreadable",
+                "status": status,
+                "detail": detail,
                 "pages": [int(region.get("page", 1) or 1)],
             })
+        related = [code for code in template.get("related_templates", []) if code]
+        if related:
+            peers = [
+                item for item in load_form_jobs().values()
+                if item.get("id") != form_job_id
+                and item.get("period") == job.get("period")
+                and item.get("template_code") in related
+                and item.get("status") == "complete"
+            ]
+            for related_code in related:
+                related_template = get_form_templates().get(related_code, {})
+                matches = [item for item in peers if item.get("template_code") == related_code]
+                checks.append({
+                    "name": f"Related form: {related_template.get('label', related_code)}",
+                    "status": "pass" if matches else "fail",
+                    "detail": (
+                        f"Matched {len(matches)} completed form(s) for period {job.get('period')}"
+                        if matches else f"Missing related form for period {job.get('period') or 'unspecified'}"
+                    ),
+                    "pages": [],
+                })
         if not checks:
             checks.append({
                 "name": "Readable form",
@@ -1272,6 +1523,13 @@ def run_form_verification(form_job_id: str) -> None:
             completed_at=utc_now(),
             result=result,
             message="Form verification complete",
+        )
+        add_notification(
+            "Food Safety form verification complete",
+            f"{job.get('name')} finished with {len(failures)} flag(s).",
+            recipient=job.get("created_by", ""),
+            url=f"/forms/{form_job_id}",
+            kind="warning" if failures else "success",
         )
     except Exception as exc:  # noqa: BLE001
         update_form_job(
@@ -1335,13 +1593,27 @@ def run_verification(job_id: str) -> None:
             summary=summary,
         )
         refresh_reviewed_output_files(final_job)
+        add_notification(
+            "Packet verification complete",
+            f"{final_job.get('packet_name')} finished with {summary.get('fail_count', 0)} flag(s).",
+            recipient=final_job.get("assignee", ""),
+            url=f"/jobs/{job_id}",
+            kind="warning" if summary.get("fail_count") else "success",
+        )
     except Exception as exc:  # noqa: BLE001 - show useful operator error on job page
-        update_job(
+        failed_job = update_job(
             job_id,
             status="failed",
             completed_at=utc_now(),
             message=str(exc),
             error_trace=traceback.format_exc(),
+        )
+        add_notification(
+            "Packet verification failed",
+            f"{failed_job.get('packet_name')}: {exc}",
+            recipient=failed_job.get("assignee", ""),
+            url=f"/jobs/{job_id}",
+            kind="error",
         )
 
 
@@ -1436,6 +1708,88 @@ async def users_page(request: Request) -> HTMLResponse:
         "users.html",
         {"request": request, "app_name": APP_NAME, "users": safe_users, "roles": list(ROLE_ORDER)},
     )
+
+
+@app.get("/notifications", response_class=HTMLResponse)
+async def notifications_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        "notifications.html",
+        {
+            "request": request,
+            "app_name": APP_NAME,
+            "notifications": user_notifications(request.state.user),
+        },
+    )
+
+
+@app.post("/notifications/read")
+async def mark_notifications_read(request: Request) -> RedirectResponse:
+    email = normalize_email(request.state.user.get("email", ""))
+    items = load_json_file(NOTIFICATIONS_FILE, [])
+    for item in items:
+        if not item.get("recipient") or item.get("recipient") in {email, "admin"}:
+            readers = set(item.get("read_by", []))
+            readers.add(email)
+            item["read_by"] = sorted(readers)
+    save_json_file(NOTIFICATIONS_FILE, items)
+    return RedirectResponse(url="/notifications", status_code=303)
+
+
+@app.get("/learned-rules", response_class=HTMLResponse)
+async def learned_rules_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        "learned_rules.html",
+        {
+            "request": request,
+            "app_name": APP_NAME,
+            "rules": list(reversed(load_json_file(LEARNED_RULES_FILE, []))),
+        },
+    )
+
+
+@app.post("/learned-rules/{rule_id}")
+async def review_learned_rule(
+    request: Request,
+    rule_id: str,
+    status: str = Form(...),
+) -> RedirectResponse:
+    if status not in {"Approved", "Rejected", "Pending"}:
+        raise HTTPException(status_code=400, detail="Unsupported rule status.")
+    rules = load_json_file(LEARNED_RULES_FILE, [])
+    rule = next((item for item in rules if item.get("id") == rule_id), None)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule proposal not found.")
+    rule.update({"status": status, "reviewed_by": actor_from_request(request), "reviewed_at": utc_now()})
+    save_json_file(LEARNED_RULES_FILE, rules)
+    return RedirectResponse(url="/learned-rules", status_code=303)
+
+
+@app.get("/backups", response_class=HTMLResponse)
+async def backups_page(request: Request) -> HTMLResponse:
+    items = sorted(BACKUPS_DIR.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+    return templates.TemplateResponse(
+        "backups.html",
+        {
+            "request": request,
+            "app_name": APP_NAME,
+            "backups": [{"name": path.name, "size": path.stat().st_size} for path in items],
+            "external_enabled": bool(os.environ.get("BACKUP_WEBHOOK_URL")),
+        },
+    )
+
+
+@app.post("/backups")
+async def create_backup() -> RedirectResponse:
+    create_backup_archive()
+    return RedirectResponse(url="/backups", status_code=303)
+
+
+@app.get("/backups/{filename}")
+async def download_backup(filename: str) -> FileResponse:
+    path = (BACKUPS_DIR / filename).resolve()
+    if BACKUPS_DIR.resolve() not in path.parents or not path.exists() or path.suffix != ".zip":
+        raise HTTPException(status_code=404, detail="Backup not found.")
+    return FileResponse(path, filename=path.name)
 
 
 @app.post("/users")
@@ -1657,8 +2011,36 @@ async def food_safety_forms(request: Request, q: str = "", status: str = "") -> 
             "templates": form_templates,
             "query": q,
             "selected_status": status,
+            "calendar_month": request.query_params.get("month") or datetime.now().strftime("%Y-%m"),
+            "calendar": production_calendar(),
+            "missing_forms": missing_form_expectations(
+                request.query_params.get("month") or datetime.now().strftime("%Y-%m")
+            ),
         },
     )
+
+
+@app.post("/forms/calendar")
+async def update_production_calendar(
+    date: str = Form(...),
+    production_status: str = Form("non-production"),
+    note: str = Form(""),
+) -> RedirectResponse:
+    try:
+        parsed = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Enter a valid calendar date.") from exc
+    calendar = production_calendar()
+    closed = calendar.setdefault("non_production_dates", {})
+    notes = calendar.setdefault("notes", {})
+    if production_status == "production":
+        closed.pop(date, None)
+    else:
+        closed[date] = note.strip() or "Non-production day"
+    if note.strip():
+        notes[date] = note.strip()
+    save_json_file(PRODUCTION_CALENDAR_FILE, calendar)
+    return RedirectResponse(url=f"/forms?month={parsed.strftime('%Y-%m')}", status_code=303)
 
 
 @app.post("/forms")
@@ -1669,6 +2051,7 @@ async def create_food_safety_form(
     template_code: str = Form(...),
     name: str = Form(""),
     period: str = Form(""),
+    form_date: str = Form(""),
     department: str = Form(""),
 ) -> RedirectResponse:
     if not pdf.filename or not pdf.filename.lower().endswith(".pdf"):
@@ -1695,6 +2078,7 @@ async def create_food_safety_form(
         "template_code": template_code,
         "template_label": template.get("label"),
         "period": period.strip(),
+        "form_date": form_date.strip(),
         "department": department.strip(),
         "input_path": str(input_path),
         "output_dir": str(output_dir),
@@ -1743,6 +2127,14 @@ async def update_food_safety_form_workflow(
         reviewer_comment=reviewer_comment.strip(),
         history=history[-50:],
     )
+    if workflow_status in {"Approved", "Filed"}:
+        auto_file_form(get_form_job(form_job_id))
+    add_notification(
+        "Food Safety workflow updated",
+        f"{job.get('name')} was moved to {workflow_status}.",
+        recipient=job.get("created_by", ""),
+        url=f"/forms/{form_job_id}",
+    )
     return RedirectResponse(url=f"/forms/{form_job_id}", status_code=303)
 
 
@@ -1773,6 +2165,9 @@ async def save_template(
     required_terms: str = Form(""),
     require_date: str = Form("false"),
     required_signatures: int = Form(0),
+    frequency: str = Form("As needed"),
+    tracking_enabled: str = Form("false"),
+    related_templates: str = Form(""),
     regions: str = Form("[]"),
     sample_pdf: Optional[UploadFile] = File(None),
 ) -> RedirectResponse:
@@ -1794,6 +2189,9 @@ async def save_template(
         required_signatures=required_signatures,
         regions_text=regions,
         sample_filename=sample_filename,
+        frequency=frequency,
+        tracking_enabled=tracking_enabled == "true",
+        related_templates_text=related_templates,
     )
     return RedirectResponse(url="/templates", status_code=303)
 
@@ -1992,6 +2390,13 @@ async def update_job_workflow(
         due_date=due_date.strip(),
         audit_trail=job.get("audit_trail"),
     )
+    if assignee.strip():
+        add_notification(
+            "Packet assigned",
+            f"{job.get('packet_name')} was assigned to you with status {workflow_status}.",
+            recipient=assignee.strip(),
+            url=f"/jobs/{job_id}",
+        )
     return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
 
 
@@ -2022,6 +2427,7 @@ async def update_issue_review(
     issue_id: str,
     status: str = Form(...),
     comment: str = Form(""),
+    propose_rule: str = Form(""),
 ) -> RedirectResponse:
     allowed = {"Open", "Corrected", "Accepted as Is", "False Positive", "Resolved"}
     if status not in allowed:
@@ -2056,8 +2462,65 @@ async def update_issue_review(
         job["updated_at"] = utc_now()
         jobs[job_id] = job
         save_jobs(jobs)
+    if status == "False Positive" and propose_rule == "true":
+        form_code = ""
+        pages = issue.get("pages") or []
+        catalog = {item["page_no"]: item for item in page_catalog(job)}
+        if pages:
+            form_code = str(catalog.get(int(pages[0]), {}).get("form_code") or "")
+        rules = load_json_file(LEARNED_RULES_FILE, [])
+        normalized_name = re.sub(r"\(p\d+\)", "(p#)", issue.get("name", "").lower())
+        proposal = {
+            "id": f"FPR-{uuid4().hex[:8].upper()}",
+            "status": "Pending",
+            "name_pattern": normalized_name,
+            "detail_pattern": "",
+            "form_code": form_code,
+            "example_name": issue.get("name"),
+            "example_detail": issue.get("detail"),
+            "source_job_id": job_id,
+            "created_by": actor_from_request(request),
+            "created_at": utc_now(),
+        }
+        rules.append(proposal)
+        save_json_file(LEARNED_RULES_FILE, rules)
+        add_notification(
+            "False-positive rule awaiting approval",
+            f"{proposal['id']} was proposed from {job.get('packet_name')}.",
+            recipient="admin",
+            url="/learned-rules",
+            kind="warning",
+        )
     refresh_reviewed_output_files(get_job(job_id))
     return RedirectResponse(url=f"/jobs/{job_id}#review-queue", status_code=303)
+
+
+@app.post("/jobs/{job_id}/delete")
+async def delete_job(request: Request, job_id: str) -> RedirectResponse:
+    job = get_job(job_id)
+    upload_root = UPLOAD_DIR.resolve()
+    output_root = OUTPUT_DIR.resolve()
+    input_path = Path(job["input_path"]).resolve()
+    output_path = Path(job["output_dir"]).resolve()
+    if upload_root not in input_path.parents or output_root not in output_path.parents:
+        raise HTTPException(status_code=400, detail="Packet paths are outside the managed data directory.")
+    if input_path.exists():
+        input_path.unlink()
+    if output_path.exists():
+        shutil.rmtree(output_path)
+    jobs = load_jobs()
+    jobs.pop(job_id, None)
+    save_jobs(jobs)
+    board = load_json_file(BOARD_FILE, {})
+    board = {key: value for key, value in board.items() if not key.startswith(f"{job_id}:")}
+    save_json_file(BOARD_FILE, board)
+    add_notification(
+        "Packet deleted",
+        f"{job.get('packet_name')} was deleted by {actor_from_request(request)}.",
+        recipient="admin",
+        kind="warning",
+    )
+    return RedirectResponse(url="/", status_code=303)
 
 
 @app.post("/jobs/{job_id}/signoff")

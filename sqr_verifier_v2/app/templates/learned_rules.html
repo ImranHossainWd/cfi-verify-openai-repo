@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="detail">
+  <p class="eyebrow">Admin approval</p>
+  <h1>Reusable false-positive rules</h1>
+  <p>Only approved rules automatically resolve matching flags on future runs.</p>
+</section>
+<section class="panel">
+  <div class="audit-list">
+  {% for rule in rules %}
+    <div class="rule-card">
+      <strong>{{ rule.id }} &middot; {{ rule.status }}</strong>
+      <span>{{ rule.example_name }}</span>
+      <small>{{ rule.example_detail }}</small>
+      <small>Form scope: {{ rule.form_code or "Any form" }} &middot; proposed by {{ rule.created_by }}</small>
+      <form action="/learned-rules/{{ rule.id }}" method="post" class="form-pair">
+        <select name="status">
+          {% for option in ["Pending", "Approved", "Rejected"] %}
+          <option {% if rule.status == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="secondary small">Save decision</button>
+      </form>
+    </div>
+  {% else %}
+    <p class="empty">No false-positive rules have been proposed.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

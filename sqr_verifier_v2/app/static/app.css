@@ -235,7 +235,7 @@ button.secondary { background: var(--ink); margin-top: 18px; }
 }
 .issue-review-form {
   display: grid;
-  grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
 }
@@ -671,6 +671,47 @@ button.small,
   border-left: 4px solid var(--bad);
   background: #fff3f2;
 }
+.bookmarks-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+}
+.bookmarks-head h3 { margin: 0; }
+.bookmark-directory {
+  max-height: 360px;
+  overflow: auto;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+.inline-check input { width: auto; }
+.danger-button {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid #b4233d;
+  border-radius: 8px;
+  padding: 11px 14px;
+  background: #fff;
+  color: #b4233d;
+  font-weight: 850;
+  cursor: pointer;
+}
+.danger-button:hover { background: #fff1f3; }
+.calendar-list { max-height: 360px; overflow: auto; }
+.rule-card form { margin-top: 8px; }
+.backup-list { margin-top: 18px; }
 @media (max-width: 820px) {
   .topbar, .title-row { align-items: flex-start; flex-direction: column; }
   main { padding: 20px; }

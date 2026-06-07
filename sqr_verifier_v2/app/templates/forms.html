@@ -21,6 +21,7 @@
       </label>
       <label>Name <input name="name" placeholder="Automatically uses file name"></label>
       <label>Period <input name="period" type="month"></label>
+      <label>Form date <input name="form_date" type="date"></label>
       <label>Department / area <input name="department" placeholder="Food Safety, Production, Warehouse"></label>
       <button type="submit">Verify forms</button>
     </form>
@@ -42,6 +43,33 @@
       </label>
       <button type="submit" class="secondary">Filter</button>
     </form>
+  </aside>
+</section>
+
+<section class="grid">
+  <article class="panel">
+    <div class="panel-head"><h2>Production calendar</h2><span>{{ calendar_month }}</span></div>
+    <form action="/forms/calendar" method="post" class="mobile-form">
+      <label>Date <input name="date" type="date" required></label>
+      <label>Day status
+        <select name="production_status">
+          <option value="non-production">Non-production</option>
+          <option value="production">Production day</option>
+        </select>
+      </label>
+      <label>Note <input name="note" placeholder="Holiday, shutdown, maintenance"></label>
+      <button type="submit" class="secondary">Update calendar</button>
+    </form>
+  </article>
+  <aside class="panel">
+    <div class="panel-head"><h2>Missing expected forms</h2><span>{{ missing_forms|length }}</span></div>
+    <div class="audit-list calendar-list">
+      {% for item in missing_forms[:40] %}
+      <div><strong>{{ item.template_label }}</strong><small>{{ item.frequency }} &middot; due {{ item.due }}</small></div>
+      {% else %}
+      <p class="empty">No expected forms are missing for this month.</p>
+      {% endfor %}
+    </div>
   </aside>
 </section>
 

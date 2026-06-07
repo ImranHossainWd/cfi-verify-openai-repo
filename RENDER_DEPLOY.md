@@ -59,6 +59,21 @@ Persistent storage: the Blueprint attaches a 10 GB Render disk at `/var/data/sqr
 
 The same disk now also stores Food Safety Form uploads, form verification results, visual template samples, packet assignments, and workflow history. No additional Render environment variables are required for these features.
 
+Optional notification and external-backup settings:
+
+```text
+SMTP_HOST
+SMTP_PORT=587
+SMTP_USER
+SMTP_PASSWORD
+SMTP_FROM
+SMTP_STARTTLS=true
+BACKUP_WEBHOOK_URL
+BACKUP_WEBHOOK_TOKEN
+```
+
+Without SMTP, notifications remain available inside the app. Without a backup webhook, Admin-created ZIP backups remain on the persistent Render disk and can be downloaded manually.
+
 ## Local Run
 
 ```bash

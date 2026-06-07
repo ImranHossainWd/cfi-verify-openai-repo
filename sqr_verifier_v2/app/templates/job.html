@@ -49,8 +49,11 @@
       </div>
 
       {% if pages %}
-        <h3>Packet pages</h3>
-        <div class="page-directory">
+        <div class="bookmarks-head">
+          <h3>Packet pages</h3>
+          <button type="button" class="secondary small" id="bookmarkToggle" aria-expanded="false">Bookmarks ({{ pages|length }})</button>
+        </div>
+        <div class="page-directory bookmark-directory" id="bookmarkDirectory" hidden>
         {% for page in pages %}
           <button
             type="button"
@@ -99,6 +102,10 @@
                   {% endfor %}
                 </select>
                 <input name="comment" value="{{ issue.comment or '' }}" placeholder="Reviewer comment">
+                <label class="inline-check">
+                  <input type="checkbox" name="propose_rule" value="true">
+                  Propose reusable rule
+                </label>
                 <button type="submit" class="small">Save</button>
               </form>
             </div>
@@ -146,6 +153,11 @@
     <form action="/jobs/{{ job.id }}/rerun" method="post">
       <button type="submit" class="secondary">Re-run packet</button>
     </form>
+    {% if request.state.user.role == "Admin" %}
+    <form action="/jobs/{{ job.id }}/delete" method="post" onsubmit="return confirm('Permanently delete this packet and all generated files?');">
+      <button type="submit" class="danger-button">Delete packet</button>
+    </form>
+    {% endif %}
     <a class="secondary-link" href="/jobs/{{ job.id }}/fields">Field confidence</a>
 
     <h3>Packet workflow</h3>
@@ -306,6 +318,15 @@ const viewerDetail = document.getElementById("viewerDetail");
 const viewerPages = document.getElementById("viewerPages");
 const viewerImage = document.getElementById("viewerImage");
 const viewerPagePdf = document.getElementById("viewerPagePdf");
+const bookmarkToggle = document.getElementById("bookmarkToggle");
+const bookmarkDirectory = document.getElementById("bookmarkDirectory");
+if (bookmarkToggle && bookmarkDirectory) {
+  bookmarkToggle.addEventListener("click", () => {
+    const open = bookmarkDirectory.hidden;
+    bookmarkDirectory.hidden = !open;
+    bookmarkToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+}
 
 function showFlagPage(flagName, flagDetail, pages) {
   if (!pages || pages.length === 0) return;

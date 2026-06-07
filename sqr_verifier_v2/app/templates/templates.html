@@ -32,6 +32,19 @@
           <input id="templateSignatures" name="required_signatures" type="number" min="0" value="0">
         </label>
       </div>
+      <div class="form-pair">
+        <label>Expected frequency
+          <select id="templateFrequency" name="frequency">
+            {% for option in ["As needed", "Daily", "Weekly", "Monthly"] %}<option>{{ option }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Track missing forms
+          <select id="templateTracking" name="tracking_enabled"><option value="false">No</option><option value="true">Yes</option></select>
+        </label>
+      </div>
+      <label>Related form codes
+        <textarea id="templateRelated" name="related_templates" placeholder="SANITATION, AIR_COMPRESSOR"></textarea>
+      </label>
       <label>Completed sample PDF
         <input name="sample_pdf" type="file" accept="application/pdf">
       </label>
@@ -59,6 +72,7 @@
         <small>Fields: {{ item.fields|join(", ") or "None configured" }}</small>
         <small>Required text: {{ item.required_terms|join(", ") or "None" }}</small>
         <small>{{ item.required_signatures }} signature label(s) &middot; {{ item.regions|length }} visual region(s)</small>
+        <small>{{ item.frequency }} &middot; {{ "Missing-form tracking on" if item.tracking_enabled else "Tracking off" }}</small>
         <button
           type="button"
           class="secondary small template-edit"
@@ -80,7 +94,10 @@ const fields = {
   date: document.getElementById("templateDate"),
   signatures: document.getElementById("templateSignatures"),
   active: document.getElementById("templateActive"),
-  regions: document.getElementById("templateRegions")
+  regions: document.getElementById("templateRegions"),
+  frequency: document.getElementById("templateFrequency"),
+  tracking: document.getElementById("templateTracking"),
+  related: document.getElementById("templateRelated")
 };
 const builder = document.getElementById("regionBuilder");
 const canvas = document.getElementById("regionCanvas");
@@ -118,6 +135,9 @@ document.querySelectorAll(".template-edit").forEach((button) => {
     fields.date.value = item.require_date ? "true" : "false";
     fields.signatures.value = item.required_signatures || 0;
     fields.active.value = item.active ? "true" : "false";
+    fields.frequency.value = item.frequency || "As needed";
+    fields.tracking.value = item.tracking_enabled ? "true" : "false";
+    fields.related.value = (item.related_templates || []).join(", ");
     regions = item.regions || [];
     if (item.sample_filename) {
       builder.hidden = false;
@@ -143,8 +163,12 @@ canvas.addEventListener("pointerup", (event) => {
   const end = {x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height};
   const label = window.prompt("Region label", "Required field");
   if (label) {
+    const interpretation = window.prompt("Interpret as: nonblank, signature, date, checkbox, or text", "nonblank") || "nonblank";
+    const expected = interpretation === "text" ? (window.prompt("Expected text", "") || "") : "";
     regions.push({
       label,
+      interpretation,
+      expected,
       page: 1,
       required: true,
       x: Math.max(0, Math.min(start.x, end.x)),

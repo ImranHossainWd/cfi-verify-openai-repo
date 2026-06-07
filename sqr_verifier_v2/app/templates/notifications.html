@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="detail">
+  <p class="eyebrow">Activity center</p>
+  <h1>Notifications</h1>
+</section>
+<section class="panel">
+  <div class="panel-head">
+    <h2>Recent activity</h2>
+    <form action="/notifications/read" method="post"><button class="secondary small" type="submit">Mark all read</button></form>
+  </div>
+  <div class="audit-list">
+    {% for item in notifications %}
+    <div class="{{ item.kind }}">
+      <strong>{{ item.title }}</strong>
+      <small>{{ item.created_at }}</small>
+      <span>{{ item.detail }}</span>
+      {% if item.url %}<a href="{{ item.url }}">Open item</a>{% endif %}
+    </div>
+    {% else %}
+    <p class="empty">No notifications yet.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

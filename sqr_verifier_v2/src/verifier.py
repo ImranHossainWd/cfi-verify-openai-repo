@@ -424,6 +424,19 @@ def extract_fields(text: str, code: str, config: Config,
             f["metal_detector_findings"] = vision_data["metal_detector_findings"]
         if vision_data.get("handwritten_corrections"):
             f["corrections"] = vision_data["handwritten_corrections"]
+        if vision_data.get("highlighted_regions"):
+            f["highlighted_regions"] = vision_data["highlighted_regions"]
+            highlighted_text = " | ".join(
+                " ".join(str(value) for value in (region.get("values") or []))
+                for region in vision_data["highlighted_regions"]
+                if isinstance(region, dict)
+            )
+            case_match = re.search(r"\b(\d{1,5})\s*(?:cs|cases?)\b", highlighted_text, re.I)
+            wo_match = re.search(r"\b(?:wo\s*#?\s*)?(\d{5})\b", highlighted_text, re.I)
+            if case_match:
+                f["highlighted_cases"] = int(case_match.group(1))
+            if wo_match:
+                f["highlighted_wo"] = wo_match.group(1)
         dynamic_fields = _flatten_dynamic_fields(vision_data.get("all_fields") or {})
         _apply_dynamic_field_aliases(f, dynamic_fields)
         for k, v in dynamic_fields.items():
@@ -1290,16 +1303,22 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
         for p in sp.pages:
             if "cases" not in p.fields:
                 continue
-            page_cases = round(p.fields["cases"])
-            page_wo    = p.fields.get("wo")
+            page_cases = round(p.fields.get("highlighted_cases", p.fields["cases"]))
+            page_wo    = p.fields.get("highlighted_wo") or p.fields.get("wo")
 
             if p.form_code in CASE_CONTEXT_FORMS:
+                highlighted = p.fields.get("highlighted_cases")
                 sp.checks.append(CheckResult(
                     f"Case count on {p.form_label} (p{p.page_no})",
-                    "info",
-                    f"{page_cases} cs is contextual inventory/source data on "
-                    f"{p.form_label}; validate its highlighted row or calculation "
-                    f"instead of comparing it directly with the shipped order total.",
+                    "pass" if highlighted is not None and highlighted in all_known_cases else "info",
+                    (
+                        f"Highlighted order-specific region identifies {highlighted} cs"
+                        + (f" for WO {page_wo}" if page_wo else "")
+                        + (" and matches the packet context." if highlighted in all_known_cases else ".")
+                        if highlighted is not None else
+                        f"{page_cases} cs is contextual inventory/source data on "
+                        f"{p.form_label}; validate its highlighted row or calculation."
+                    ),
                     [p.page_no], sub_packet=sp.index))
                 continue
 
@@ -1607,6 +1626,34 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                 sub_packet=sp.index))
 
     # 10. SQR Checkoff List completeness — all 8 items checked, both signatures
+    for p in sp.pages:
+        if p.form_code != "SQR_XC":
+            continue
+        fields = p.fields if isinstance(p.fields, dict) else {}
+        all_fields = fields.get("all_fields") if isinstance(fields.get("all_fields"), dict) else {}
+        office_present = fields.get("office_verification_present")
+        office_by = fields.get("office_verified_by") or all_fields.get("office_verified_by")
+        office_date = fields.get("office_verification_date") or all_fields.get("office_verification_date")
+        office_initials = [
+            item for item in fields.get("initials_present", [])
+            if "office" in str(item.get("location", "")).lower()
+        ]
+        if office_present is True or office_by or office_initials:
+            detail = "Office check/sign-off detected"
+            if office_by:
+                detail += f" by {office_by}"
+            if office_date:
+                detail += f", dated {office_date}"
+            sp.checks.append(CheckResult(
+                f"Office sign-off on Extra Case SQR (p{p.page_no})",
+                "pass", detail, [p.page_no], sub_packet=sp.index))
+        else:
+            sp.checks.append(CheckResult(
+                f"Office sign-off on Extra Case SQR (p{p.page_no})",
+                "fail",
+                "The office-use review/signature area was not completed or could not be read.",
+                [p.page_no], sub_packet=sp.index))
+
     for p in sp.pages:
         if p.form_code != "SQR_CHK":
             continue

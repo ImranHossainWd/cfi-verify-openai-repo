@@ -29,6 +29,33 @@ After login, Admin users can manage additional users at `/users`. Roles are `Adm
 
 The Standard instance is configured in `render.yaml`. Uploaded/generated files, review status, corrected-page history, and runtime YAML settings are stored on a Render persistent disk mounted at `/var/data/sqr-verifier`.
 
+## Compliance Workflow
+
+- Packet pages are collapsed behind a Bookmarks button.
+- Admins can delete packets and their generated files.
+- Food Safety templates support daily, weekly, monthly, or as-needed schedules.
+- The production calendar excludes shutdown dates from missing-form checks.
+- Related templates are cross-checked for the same reporting period.
+- Approved Food Safety forms are filed automatically on persistent storage.
+- Visual regions support nonblank, signature, date, checkbox, and expected-text interpretation.
+- Reviewers can propose reusable false-positive rules; only Admin-approved rules affect future runs.
+- In-app notifications are built in. SMTP email and external backup delivery are optional.
+
+Optional Render environment variables:
+
+```text
+SMTP_HOST
+SMTP_PORT=587
+SMTP_USER
+SMTP_PASSWORD
+SMTP_FROM
+SMTP_STARTTLS=true
+BACKUP_WEBHOOK_URL
+BACKUP_WEBHOOK_TOKEN
+```
+
+`BACKUP_WEBHOOK_URL` must accept an authenticated `POST` containing a ZIP body.
+
 Runtime settings are available at `/settings`. The editor validates YAML before saving and keeps timestamped backups on the persistent disk. This changes rule behavior without narrowing the AI extraction: packet-specific values returned under `all_fields` are still auto-added to the cross-reference matrix.
 
 The default OpenAI vision model is `gpt-5.4-mini`. `FULL_PACKET_FIELD_DISCOVERY=true` makes GPT-5.4 Mini read every page first, so packet-specific fields from `all_fields` are flattened into the cross-reference matrix automatically. Tesseract still runs on every page as a fallback.

@@ -93,6 +93,7 @@ Pay specific attention to handwriting:
 - Initials and signatures (any handwritten 2-3 letter codes — SA, RA, MA, JM, HS, etc.).
 - Any defect-bag sticky-note text like "WO# 11560 Hair" or "WO# 11560 Pit Fragment".
 - Crossouts and corrections (e.g. one number crossed out and another written next to it with initials).
+- On an EXTRA CASE - SORTING QUALITY REPORT, inspect the bottom office-use/sign-off area carefully. Record whether the office reviewed/signed the form, the office reviewer name or initials, and the office sign-off date. A production/QC signature elsewhere is not the office sign-off.
 
 Return STRICTLY this JSON shape (no markdown, no commentary):
 
@@ -124,6 +125,9 @@ Return STRICTLY this JSON shape (no markdown, no commentary):
   "defect_bag_label": "<sticky note text e.g. 'WO# 11560 Pit Fragment' if this is a defect photo, else null>",
   "metal_detector_findings": "<FINDINGS or NO FINDINGS or null>",
   "handwritten_corrections": [{"crossed_out": "11342", "replaced_with": "11392", "initialed": true}],
+  "office_verification_present": <true|false|null>,
+  "office_verified_by": "<office reviewer name/initials if present, else null>",
+  "office_verification_date": "<office sign-off date if present, else null>",
   "highlighted_regions": [
     {"region": "<description e.g. 'column 5 of moisture row'>", "marker_color": "<green|yellow|pink|red>",
      "values": ["<the values in that highlighted region>"],
