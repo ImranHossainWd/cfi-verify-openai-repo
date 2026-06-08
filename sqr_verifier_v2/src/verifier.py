@@ -1311,6 +1311,11 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                 known_wos.add(p.fields["wo"])
             for w in (p.fields.get("wo_candidates") or []):
                 known_wos.add(w)
+        # The sub-packet primary WO may have been established during packet
+        # grouping even when no PRIMARY_ORDER_WO_FORMS page supplied it here.
+        # Never compare a required page against an accidentally empty WO set.
+        if sp.primary_wo:
+            known_wos.add(sp.primary_wo)
 
         # WO# check
         if not sp.primary_wo:
@@ -1392,6 +1397,14 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                             f"PO# on {p.form_label} (p{p.page_no})",
                             "info",
                             f"PO# not detected on this page (please confirm visually)",
+                            [p.page_no], sub_packet=sp.index))
+                        continue
+                    if is_source_or_support_page(p):
+                        sp.checks.append(CheckResult(
+                            f"PO# on {p.form_label} (p{p.page_no})",
+                            "pass",
+                            f"PO# {ppo} belongs to source/support documentation and "
+                            f"is not compared to final-order PO {sp.primary_po}.",
                             [p.page_no], sub_packet=sp.index))
                         continue
                     if po_equivalent(ppo, sp.primary_po):
