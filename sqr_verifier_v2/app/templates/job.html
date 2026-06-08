@@ -25,18 +25,6 @@
         <div><strong>{{ job.summary.fail_count }}</strong><small>Flags</small></div>
       </div>
 
-      {% if job.summary.warnings %}
-        <h3>OCR warnings</h3>
-        <div class="flags">
-        {% for warning in job.summary.warnings %}
-          <div class="flag">
-            <strong>Partial OCR report</strong>
-            <span>{{ warning }}</span>
-          </div>
-        {% endfor %}
-        </div>
-      {% endif %}
-
       <h3>Sub-packets</h3>
       <div class="subpackets">
       {% for sp in job.summary.sub_packets %}
