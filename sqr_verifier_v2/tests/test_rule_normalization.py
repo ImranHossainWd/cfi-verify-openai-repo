@@ -144,6 +144,23 @@ class RuleNormalizationTests(unittest.TestCase):
             },
             "office_verified_by": "AA",
         }
+        used_blank_table_office_with_page_signatures = {
+            "case_metal_detector_verification": {
+                "row_used": True,
+                "date": "5/6/26",
+                "pallet_bin": "Pallet 1",
+                "passed": True,
+                "initials": "SA",
+                "office_checked": None,
+                "office": "",
+            },
+            "office_verification_present": True,
+            "office_verified_by": "EL",
+            "initials_present": [
+                {"location": "Verification", "value": "AA"},
+                {"location": "2nd Verification", "value": "EL"},
+            ],
+        }
         old_result_with_one_ambiguous_value = {
             "case_metal_detector_verification": {"date": "5/8/26"},
             "initials_present": [{"location": "Verification", "value": "AA"}],
@@ -160,6 +177,7 @@ class RuleNormalizationTests(unittest.TestCase):
         self.assertFalse(metal_detector_verification_row_used(old_result_with_one_ambiguous_value))
         self.assertTrue(metal_detector_verification_row_used(old_result_with_two_row_values))
         self.assertFalse(office_signoff_present(used_missing_office))
+        self.assertFalse(office_signoff_present(used_blank_table_office_with_page_signatures))
         self.assertTrue(office_signoff_present(used_with_office))
 
     def test_source_coa_customer_and_cases_are_context(self):
