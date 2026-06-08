@@ -520,6 +520,15 @@ def office_signoff_present(fields: Dict[str, Any]) -> bool:
         office_checked = cmd.get("office_checked")
         if isinstance(office_checked, bool):
             return office_checked
+        # When the table was extracted, only content inside its Office cell
+        # can satisfy this rule. Never borrow QC/Verification signatures from
+        # elsewhere on the page.
+        office_value = cmd.get("office")
+        if office_value not in {None, False, "", "false", "False"}:
+            office_text = str(office_value).strip()
+            if re.search(r"[A-Za-z]{2,}|\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b|[xX]", office_text):
+                return True
+        return False
     if fields.get("office_verification_present") is True:
         return True
     blob = " ".join(
