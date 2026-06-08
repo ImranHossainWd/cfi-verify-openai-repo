@@ -233,6 +233,65 @@ class RuleNormalizationTests(unittest.TestCase):
         ]
         self.assertEqual(bad, [])
 
+    def test_stamp_log_uses_subpacket_primary_wo_when_discovered_set_is_empty(self):
+        stamp_page = PageRecord(
+            63,
+            "",
+            "Stamp Log",
+            "STAMP",
+            {"wo": "11623", "customer": "Example Customer"},
+        )
+        sp = SubPacket(
+            index=0,
+            pages=[stamp_page],
+            primary_wo="11623",
+            primary_customer="Example Customer",
+        )
+        run_subpacket_checks(sp, self.config, None)
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail"
+            and check.pages == [63]
+            and check.name.startswith("WO# on Stamp Log")
+        ]
+        self.assertEqual(failures, [])
+
+    def test_extra_cases_used_source_po_is_not_compared_to_final_po(self):
+        primary_page = PageRecord(
+            10,
+            "",
+            "SQR Checkoff List",
+            "SQR_CHK",
+            {"wo": "11623", "po": "1321391", "customer": "Example Customer"},
+        )
+        source_page = PageRecord(
+            69,
+            "",
+            "Extra Cases USED form",
+            "XC_USED",
+            {
+                "wo": "53151",
+                "po": "Verbal/Hugh 4/25/26",
+                "customer": "Example Customer",
+                "all_fields": {"original source WO": "53151"},
+            },
+        )
+        sp = SubPacket(
+            index=0,
+            pages=[primary_page, source_page],
+            primary_wo="11623",
+            primary_po="1321391",
+            primary_customer="Example Customer",
+        )
+        run_subpacket_checks(sp, self.config, None)
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail"
+            and check.pages == [69]
+            and check.name.startswith("PO# on Extra Cases USED form")
+        ]
+        self.assertEqual(failures, [])
+
 
 if __name__ == "__main__":
     unittest.main()
