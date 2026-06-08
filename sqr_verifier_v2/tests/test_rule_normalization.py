@@ -86,6 +86,7 @@ class RuleNormalizationTests(unittest.TestCase):
         unused = {"all_fields": {"case_metal_detector_verification": ""}, "initials_present": []}
         printed_blank = {
             "case_metal_detector_verification": {
+                "row_used": False,
                 "date": "Date",
                 "pallet_bin": "Pallet/Bin #",
                 "passed": "Passed",
@@ -96,15 +97,34 @@ class RuleNormalizationTests(unittest.TestCase):
             "office_verification_present": False,
         }
         used_missing_office = {
-            "case_metal_detector_verification": {"date": "5/1/26", "pallet": "1", "result": "Pass"},
+            "case_metal_detector_verification": {
+                "row_used": True,
+                "date": "5/1/26",
+                "pallet": "1",
+                "result": "Pass",
+                "office_checked": False,
+            },
             "office_verification_present": False,
         }
         used_with_arbitrary_text = {
-            "case_metal_detector_verification": {"date": "handwritten note"},
+            "case_metal_detector_verification": {"row_used": True, "date": "handwritten note"},
             "office_verification_present": False,
+        }
+        blank_row_with_unrelated_form_values = {
+            "case_metal_detector_verification": {
+                "row_used": False,
+                "date": "5/8/26",
+                "initials": "AA",
+                "office_checked": False,
+            },
+            "initials_present": [
+                {"location": "Verification", "value": "AA"},
+                {"location": "2nd Verification", "value": "EL"},
+            ],
         }
         benzler_p51 = {
             "case_metal_detector_verification": {
+                "row_used": True,
                 "date": "5-6-26",
                 "pallet_bin": "Pallet 1",
                 "passed": True,
@@ -115,14 +135,30 @@ class RuleNormalizationTests(unittest.TestCase):
             "office_verification_present": False,
         }
         used_with_office = {
-            "case_metal_detector_verification": {"date": "5/1/26", "pallet": "1", "result": "Pass"},
+            "case_metal_detector_verification": {
+                "row_used": True,
+                "date": "5/1/26",
+                "pallet": "1",
+                "result": "Pass",
+                "office_checked": True,
+            },
             "office_verified_by": "AA",
+        }
+        old_result_with_one_ambiguous_value = {
+            "case_metal_detector_verification": {"date": "5/8/26"},
+            "initials_present": [{"location": "Verification", "value": "AA"}],
+        }
+        old_result_with_two_row_values = {
+            "case_metal_detector_verification": {"date": "5/6/26", "pallet_bin": "Pallet 1"},
         }
         self.assertFalse(metal_detector_verification_row_used(unused))
         self.assertFalse(metal_detector_verification_row_used(printed_blank))
+        self.assertFalse(metal_detector_verification_row_used(blank_row_with_unrelated_form_values))
         self.assertTrue(metal_detector_verification_row_used(used_missing_office))
         self.assertTrue(metal_detector_verification_row_used(used_with_arbitrary_text))
         self.assertTrue(metal_detector_verification_row_used(benzler_p51))
+        self.assertFalse(metal_detector_verification_row_used(old_result_with_one_ambiguous_value))
+        self.assertTrue(metal_detector_verification_row_used(old_result_with_two_row_values))
         self.assertFalse(office_signoff_present(used_missing_office))
         self.assertTrue(office_signoff_present(used_with_office))
 
