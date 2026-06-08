@@ -53,6 +53,8 @@ customers:
       - "Trader Joe's"
       - "Trader Joe"
       - "Trader Joes"
+      - "TRADER JOES"
+      - "Trader Joe's Company"
     customer_code: ""
     co_packer_route: true         # Ships to co-packer, no BOL or Trailer/Cargo
     requires_bol: false
@@ -126,8 +128,47 @@ customers:
       - "Tropic Foods Inc"
       - "Tropicool Foods Inc"
       - "TopCon Foods Inc"
+      - "TROPICON FOODS c/o LINEAGE LOGISTICS"
     customer_code: ""
     co_packer_route: false
     requires_bol: true
     requires_trailer_inspection: true
     notes: "Reviewed OCR variants; supporting-form customer roles still require context."
+
+  - canonical: "Benzler Farms"
+    aliases:
+      - "Benzler Farms"
+      - "Benzler Farm"
+      - "Benzler"
+      - "Benzler Farms Inc"
+      - "Benzler Farms, Inc."
+    customer_code: ""
+    co_packer_route: false
+    requires_bol: true
+    requires_trailer_inspection: true
+    notes: "Legal suffix and shortened-name variants are equivalent."
+
+  - canonical: "Lone Star"
+    aliases:
+      - "Lone Star"
+      - "Lone Star Raisins"
+      - "Lone Star Growers"
+    customer_code: ""
+    co_packer_route: false
+    requires_bol: true
+    requires_trailer_inspection: true
+    is_backup_source_only: true
+    notes: "Source/original-lot customer that may appear on supporting COAs."
+
+  - canonical: "California Fruit Inc."
+    aliases:
+      - "California Fruit Inc"
+      - "California Fruit Inc."
+      - "California Fruit, Inc."
+      - "California Fruit Basket"
+    customer_code: ""
+    co_packer_route: false
+    requires_bol: true
+    requires_trailer_inspection: true
+    is_backup_source_only: true
+    notes: "Processor/form owner or source-lot context; do not treat a header occurrence as the packet customer."
