@@ -12,6 +12,7 @@ if str(SRC) not in sys.path:
 from verifier import (
     Config,
     PageRecord,
+    SubPacket,
     customer_equivalent,
     is_processor_header_customer,
     is_source_or_support_page,
@@ -23,6 +24,7 @@ from verifier import (
     normalize_po,
     office_signoff_present,
     po_equivalent,
+    run_subpacket_checks,
     wo_equivalent,
 )
 
@@ -137,6 +139,45 @@ class RuleNormalizationTests(unittest.TestCase):
             },
         )
         self.assertTrue(is_source_or_support_page(source_coa))
+
+    def test_source_coa_does_not_fail_customer_or_case_count(self):
+        primary_page = PageRecord(
+            10,
+            "",
+            "SQR Checkoff List",
+            "SQR_CHK",
+            {"wo": "11623", "po": "VERBALHUGH2026-04-25", "customer": "Benzler Farms", "product": "Raisins", "cases": 1},
+        )
+        source_coa = PageRecord(
+            59,
+            "",
+            "Certificate of Analysis (COA)",
+            "COA",
+            {
+                "wo": "99999",
+                "po": "SOURCE",
+                "customer": "Lone Star",
+                "product": "Raisins",
+                "cases": 451,
+                "all_fields": {"source lot": "original lot support"},
+            },
+        )
+        sp = SubPacket(
+            index=0,
+            pages=[primary_page, source_coa],
+            primary_wo="11623",
+            primary_po="VERBALHUGH2026-04-25",
+            primary_customer="Benzler Farms",
+            primary_product="Raisins",
+        )
+        run_subpacket_checks(sp, self.config, self.config.find_customer("Benzler Farms"))
+        bad = [
+            check for check in sp.checks
+            if check.status == "fail"
+            and check.pages == [59]
+            and ("Customer on" in check.name or "Case count on" in check.name)
+        ]
+        self.assertEqual(bad, [])
 
 
 if __name__ == "__main__":
