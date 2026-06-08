@@ -1404,11 +1404,11 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                         f"Customer = {pc} ✓" + (f" — {src}" if src else ""),
                         [p.page_no], sub_packet=sp.index))
                 elif pc and not customer_equivalent(pc, sp.primary_customer, config):
-                    if p.fields.get("is_backup_source"):
+                    if p.fields.get("is_backup_source") or is_source_or_support_page(p):
                         sp.checks.append(CheckResult(
                             f"Customer on {p.form_label} (p{p.page_no})",
-                            "info",
-                            f"{pc} — backup source for extra-case order, not an error",
+                            "pass",
+                            f"{pc} appears on source/original-lot support documentation, not the final packet customer.",
                             [p.page_no], sub_packet=sp.index))
                     elif p.form_code in SUPPORTING_CONTEXT_FORMS:
                         sp.checks.append(CheckResult(
@@ -1479,7 +1479,7 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
             if (
                 wo and cs is not None
                 and p.form_code in CASE_BASELINE_FORMS
-                and not p.fields.get("is_backup_source")
+                and not is_source_or_support_page(p)
                 and (not known_wos or wo in known_wos)
             ):
                 cases_by_wo.setdefault(wo, Counter())[round(cs)] += 1
@@ -1504,6 +1504,14 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                     f"Case count on {p.form_label} (p{p.page_no})",
                     "pass",
                     f"{page_cases} is a pallet/piece/label/stamp count, not a final case-count mismatch.",
+                    [p.page_no], sub_packet=sp.index))
+                continue
+
+            if is_source_or_support_page(p):
+                sp.checks.append(CheckResult(
+                    f"Case count on {p.form_label} (p{p.page_no})",
+                    "pass",
+                    f"{page_cases} cs belongs to source/original-lot support documentation and is not compared to the current packet quantity.",
                     [p.page_no], sub_packet=sp.index))
                 continue
 
@@ -1616,7 +1624,7 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
             # not in the primary-QC list have legitimately different
             # values OR may carry Tesseract-misread values that would
             # produce false-positive failures.
-            if p.fields.get("is_backup_source"):
+            if is_source_or_support_page(p):
                 continue
             if p.form_code not in PRIMARY_QC_FORMS:
                 continue
@@ -1692,7 +1700,7 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
         # Pages without a detected WO# are pooled into a "no-wo" group.
         groups: Dict[str, Dict[Any, List[int]]] = {}
         for p in sp.pages:
-            if p.fields.get("is_backup_source"):
+            if is_source_or_support_page(p):
                 continue
             if restrict_to is not None and p.form_code not in restrict_to:
                 continue
