@@ -429,36 +429,73 @@ def weight_type(fields: Dict[str, Any]) -> str:
 
 def metal_detector_verification_row_used(fields: Dict[str, Any]) -> bool:
     cmd = fields.get("case_metal_detector_verification") or fields.get("metal_detector_verification") or {}
-    noise = {
-        "", "date", "pallet/bin #", "pallet/bin#", "pallet", "bin", "passed",
-        "failed", "initials", "office", "pass", "fail", "none", "n/a", "na",
+    row_keys = {"date", "pallet", "pallet_bin", "pallet/bin", "bin", "passed", "failed", "result", "initials"}
+    header_values = {
+        "", "date", "pallet/bin #", "pallet/bin#", "pallet/bin", "pallet", "bin",
+        "passed", "failed", "pass", "fail", "result", "initials", "none", "n/a", "na",
     }
 
-    def meaningful(value: Any) -> bool:
-        if value in {None, False}:
+    def has_row_value(value: Any) -> bool:
+        if value is None or value is False:
             return False
         text = str(value).strip()
-        if not text or text.lower() in noise:
+        if not text:
             return False
-        if re.search(r"\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b", text):
-            return True
-        if re.search(r"\bpallet\s*\d+|\bbin\s*\d+|\bpassed?\s*[:=]?\s*[xX✓✔]|\bfailed?\s*[:=]?\s*[xX✓✔]|\binitials?\s*[:=]?\s*[A-Za-z]{2,}", text, re.I):
-            return True
-        if re.fullmatch(r"[A-Za-z]{2,4}", text) and text.lower() not in noise:
-            return True
-        return False
+        low = re.sub(r"\s+", " ", text.lower())
+        if low in header_values:
+            return False
+        cleaned = re.sub(r"date|pallet/bin\s*#?|pallet|bin|passed|failed|pass|fail|result|initials|office|[:|#\\s().,-]", "", low)
+        return bool(cleaned.strip())
 
     if isinstance(cmd, dict):
-        return any(meaningful(v) for v in cmd.values())
-    if meaningful(cmd):
+        for key, value in cmd.items():
+            key_norm = re.sub(r"[^a-z_/]+", "_", str(key).lower()).strip("_")
+            if "office" in key_norm:
+                continue
+            if key_norm in row_keys or any(part in key_norm for part in row_keys):
+                if has_row_value(value):
+                    return True
+
+    def flatten(value: Any) -> List[str]:
+        if value is None or value is False:
+            return []
+        if isinstance(value, dict):
+            return [part for k, v in value.items() for part in flatten(f"{k}: {v}")]
+        if isinstance(value, list):
+            return [part for item in value for part in flatten(item)]
+        text = str(value).strip()
+        return [text] if text else []
+
+    def row_signal_score(value: Any) -> int:
+        text = " | ".join(flatten(value)).lower()
+        if not text:
+            return 0
+        # Printed headers only should not count as a used row.
+        stripped = re.sub(r"date|pallet/bin\s*#?|passed|failed|initials|office|case metal detector verification|raisins|apple ring|pitted prunes|etc|[:|#\\s().,-]", "", text)
+        if not stripped.strip():
+            return 0
+        score = 0
+        if re.search(r"\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b", text):
+            score += 1
+        if re.search(r"\bpallet[^|]{0,12}\d+|\bbin[^|]{0,12}\d+|pallet/bin\s*[:=]?\s*[a-z0-9]+", text, re.I):
+            score += 1
+        if re.search(r"\bpassed?\s*[:=]?\s*(?:true|yes|x|checked|✓|✔)|\bfailed?\s*[:=]?\s*(?:true|yes|x|checked|✓|✔)|\bresult\s*[:=]\s*(?:pass|fail)", text, re.I):
+            score += 1
+        if re.search(r"\binitials?\s*[:=]?\s*[a-z]{2,4}\b", text, re.I):
+            score += 1
+        return score
+
+    if row_signal_score(cmd) >= 1 and has_row_value(cmd):
         return True
     all_fields = fields.get("all_fields") if isinstance(fields.get("all_fields"), dict) else {}
     for key, value in all_fields.items():
         key_text = str(key).lower()
-        if "case" in key_text and "metal" in key_text and meaningful(value):
+        combined = {key: value}
+        value_text = " ".join(flatten(value)).lower()
+        if ("case" in key_text and "metal" in key_text and row_signal_score(combined) >= 1 and has_row_value(value)):
             return True
-    if fields.get("metal_detector_findings") and str(fields.get("metal_detector_findings")).strip().lower() not in {"no findings", "none", "n/a", "na"}:
-        return True
+        if "case metal detector verification" in value_text and row_signal_score(value) >= 1 and has_row_value(value):
+            return True
     if any("case metal" in str(item.get("location", "")).lower() for item in fields.get("initials_present", [])):
         return True
     return False
@@ -576,6 +613,8 @@ def extract_fields(text: str, code: str, config: Config,
             f["defect_bag_label"] = vision_data.get("defect_bag_label")
         if vision_data.get("metal_detector_findings"):
             f["metal_detector_findings"] = vision_data["metal_detector_findings"]
+        if vision_data.get("case_metal_detector_verification"):
+            f["case_metal_detector_verification"] = vision_data["case_metal_detector_verification"]
         if vision_data.get("handwritten_corrections"):
             f["corrections"] = vision_data["handwritten_corrections"]
         if vision_data.get("highlighted_regions"):
