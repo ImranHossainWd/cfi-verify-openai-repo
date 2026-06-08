@@ -447,14 +447,27 @@ def metal_detector_verification_row_used(fields: Dict[str, Any]) -> bool:
         cleaned = re.sub(r"date|pallet/bin\s*#?|pallet|bin|passed|failed|pass|fail|result|initials|office|[:|#\\s().,-]", "", low)
         return bool(cleaned.strip())
 
+    if not isinstance(cmd, dict):
+        return False
+
+    explicit_row_used = cmd.get("row_used")
+    if isinstance(explicit_row_used, bool):
+        return explicit_row_used
+
+    populated_columns = 0
     if isinstance(cmd, dict):
         for key, value in cmd.items():
             key_norm = re.sub(r"[^a-z_/]+", "_", str(key).lower()).strip("_")
-            if "office" in key_norm:
+            if "office" in key_norm or key_norm == "row_used":
                 continue
             if key_norm in row_keys or any(part in key_norm for part in row_keys):
                 if has_row_value(value):
-                    return True
+                    populated_columns += 1
+
+    # Legacy OCR results did not include row_used. Two independent populated
+    # table cells are required so ordinary verification/date fields elsewhere
+    # on the form cannot activate this rule.
+    return populated_columns >= 2
 
     def flatten(value: Any) -> List[str]:
         if value is None or value is False:
@@ -502,6 +515,11 @@ def metal_detector_verification_row_used(fields: Dict[str, Any]) -> bool:
 
 
 def office_signoff_present(fields: Dict[str, Any]) -> bool:
+    cmd = fields.get("case_metal_detector_verification") or fields.get("metal_detector_verification") or {}
+    if isinstance(cmd, dict):
+        office_checked = cmd.get("office_checked")
+        if isinstance(office_checked, bool):
+            return office_checked
     if fields.get("office_verification_present") is True:
         return True
     blob = " ".join(

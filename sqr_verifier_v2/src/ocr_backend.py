@@ -94,7 +94,7 @@ Pay specific attention to handwriting:
 - Any defect-bag sticky-note text like "WO# 11560 Hair" or "WO# 11560 Pit Fragment".
 - Crossouts and corrections (e.g. one number crossed out and another written next to it with initials).
 - On an EXTRA CASE - SORTING QUALITY REPORT, inspect the bottom office-use/sign-off area carefully. Record whether the office reviewed/signed the form, the office reviewer name or initials, and the office sign-off date. A production/QC signature elsewhere is not the office sign-off.
-- On an EXTRA CASE - SORTING QUALITY REPORT, inspect the "CASE Metal Detector Verification" table row separately. Do not confuse printed column labels with filled row data. If a handwritten row contains Date, Pallet/Bin #, Passed/Failed checkmark, or Initials, return those values in `case_metal_detector_verification`. If the row is blank, return null/empty values.
+- On an EXTRA CASE - SORTING QUALITY REPORT, inspect the "CASE Metal Detector Verification" table row separately. Only inspect handwriting/checkmarks physically inside the row cells directly below Date, Pallet/Bin #, Passed, Failed, Initials, and Office. Ignore QC, Verification, 2nd Verification, dates, initials, checkmarks, and handwriting elsewhere on the form. Set `row_used` true if ANY row cell other than Office contains handwriting or a checkmark. Set it false when those row cells are blank. If `row_used` is false, return null/empty row values even when other parts of the page are completed.
 
 Return STRICTLY this JSON shape (no markdown, no commentary):
 
@@ -127,6 +127,7 @@ Return STRICTLY this JSON shape (no markdown, no commentary):
   "metal_detector_findings": "<FINDINGS or NO FINDINGS or null>",
   "handwritten_corrections": [{"crossed_out": "11342", "replaced_with": "11392", "initialed": true}],
   "case_metal_detector_verification": {
+    "row_used": <true|false>,
     "date": "<handwritten row date if present, else null>",
     "pallet_bin": "<handwritten pallet/bin value if present, else null>",
     "passed": <true|false|null>,
