@@ -392,6 +392,9 @@ def page_has_relevant_wo(page: "PageRecord", known_wos: set) -> bool:
 def is_source_or_support_page(page: "PageRecord") -> bool:
     if page.fields.get("is_backup_source"):
         return True
+    customer = page.fields.get("customer")
+    if customer and normalize_company_name(customer) in {"lonestar", "californiafruit", "californiafruitinc"}:
+        return True
     text = " ".join(str(v) for v in [page.form_label, page.form_code, page.fields, page.notes]).lower()
     if page.form_code in {"SQR_XC", "XC_USED", "PULL", "BIN_TAG", "SORT_OUT", "DAILY", "CMD", "LMD", "LAB", "SORT_FIND"}:
         return True
@@ -425,15 +428,40 @@ def weight_type(fields: Dict[str, Any]) -> str:
 
 
 def metal_detector_verification_row_used(fields: Dict[str, Any]) -> bool:
-    blob = " ".join(str(v) for v in fields.values()).lower()
     cmd = fields.get("case_metal_detector_verification") or fields.get("metal_detector_verification") or {}
-    if isinstance(cmd, dict) and any(str(v).strip() for v in cmd.values()):
+    noise = {
+        "", "date", "pallet/bin #", "pallet/bin#", "pallet", "bin", "passed",
+        "failed", "initials", "office", "pass", "fail", "none", "n/a", "na",
+    }
+
+    def meaningful(value: Any) -> bool:
+        if value in {None, False}:
+            return False
+        text = str(value).strip()
+        if not text or text.lower() in noise:
+            return False
+        if re.search(r"\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b", text):
+            return True
+        if re.search(r"\bpallet\s*\d+|\bbin\s*\d+|\bpassed?\s*[:=]?\s*[xX✓✔]|\bfailed?\s*[:=]?\s*[xX✓✔]|\binitials?\s*[:=]?\s*[A-Za-z]{2,}", text, re.I):
+            return True
+        if re.fullmatch(r"[A-Za-z]{2,4}", text) and text.lower() not in noise:
+            return True
+        return False
+
+    if isinstance(cmd, dict):
+        return any(meaningful(v) for v in cmd.values())
+    if meaningful(cmd):
         return True
+    all_fields = fields.get("all_fields") if isinstance(fields.get("all_fields"), dict) else {}
+    for key, value in all_fields.items():
+        key_text = str(key).lower()
+        if "case" in key_text and "metal" in key_text and meaningful(value):
+            return True
     if fields.get("metal_detector_findings") and str(fields.get("metal_detector_findings")).strip().lower() not in {"no findings", "none", "n/a", "na"}:
         return True
     if any("case metal" in str(item.get("location", "")).lower() for item in fields.get("initials_present", [])):
         return True
-    return "case metal detector verification" in blob and any(token in blob for token in ("pass", "fail", "pallet", "bin", "initial", "date"))
+    return False
 
 
 def office_signoff_present(fields: Dict[str, Any]) -> bool:
