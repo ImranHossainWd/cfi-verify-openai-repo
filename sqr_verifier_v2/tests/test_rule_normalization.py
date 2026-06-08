@@ -14,6 +14,7 @@ from verifier import (
     PageRecord,
     customer_equivalent,
     is_processor_header_customer,
+    is_source_or_support_page,
     kg_to_lb,
     looks_like_package_count,
     metal_detector_verification_row_used,
@@ -81,6 +82,17 @@ class RuleNormalizationTests(unittest.TestCase):
 
     def test_office_required_only_when_metal_detector_row_used(self):
         unused = {"all_fields": {"case_metal_detector_verification": ""}, "initials_present": []}
+        printed_blank = {
+            "case_metal_detector_verification": {
+                "date": "Date",
+                "pallet_bin": "Pallet/Bin #",
+                "passed": "Passed",
+                "failed": "Failed",
+                "initials": "Initials",
+                "office": "Office",
+            },
+            "office_verification_present": False,
+        }
         used_missing_office = {
             "case_metal_detector_verification": {"date": "5/1/26", "pallet": "1", "result": "Pass"},
             "office_verification_present": False,
@@ -90,9 +102,24 @@ class RuleNormalizationTests(unittest.TestCase):
             "office_verified_by": "AA",
         }
         self.assertFalse(metal_detector_verification_row_used(unused))
+        self.assertFalse(metal_detector_verification_row_used(printed_blank))
         self.assertTrue(metal_detector_verification_row_used(used_missing_office))
         self.assertFalse(office_signoff_present(used_missing_office))
         self.assertTrue(office_signoff_present(used_with_office))
+
+    def test_source_coa_customer_and_cases_are_context(self):
+        source_coa = PageRecord(
+            52,
+            "",
+            "Certificate of Analysis (COA)",
+            "COA",
+            {
+                "customer": "Lone Star",
+                "cases": 728,
+                "all_fields": {"source lot": "original lot support"},
+            },
+        )
+        self.assertTrue(is_source_or_support_page(source_coa))
 
 
 if __name__ == "__main__":
