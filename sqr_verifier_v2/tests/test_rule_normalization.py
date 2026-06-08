@@ -97,6 +97,21 @@ class RuleNormalizationTests(unittest.TestCase):
             "case_metal_detector_verification": {"date": "5/1/26", "pallet": "1", "result": "Pass"},
             "office_verification_present": False,
         }
+        used_with_arbitrary_text = {
+            "case_metal_detector_verification": {"date": "handwritten note"},
+            "office_verification_present": False,
+        }
+        benzler_p51 = {
+            "case_metal_detector_verification": {
+                "date": "5-6-26",
+                "pallet_bin": "Pallet 1",
+                "passed": True,
+                "failed": False,
+                "initials": "SA",
+                "office_checked": False,
+            },
+            "office_verification_present": False,
+        }
         used_with_office = {
             "case_metal_detector_verification": {"date": "5/1/26", "pallet": "1", "result": "Pass"},
             "office_verified_by": "AA",
@@ -104,6 +119,8 @@ class RuleNormalizationTests(unittest.TestCase):
         self.assertFalse(metal_detector_verification_row_used(unused))
         self.assertFalse(metal_detector_verification_row_used(printed_blank))
         self.assertTrue(metal_detector_verification_row_used(used_missing_office))
+        self.assertTrue(metal_detector_verification_row_used(used_with_arbitrary_text))
+        self.assertTrue(metal_detector_verification_row_used(benzler_p51))
         self.assertFalse(office_signoff_present(used_missing_office))
         self.assertTrue(office_signoff_present(used_with_office))
 
