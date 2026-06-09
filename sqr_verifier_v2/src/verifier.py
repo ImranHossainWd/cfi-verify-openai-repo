@@ -1367,7 +1367,10 @@ def alternate_vendor_support_page(page: PageRecord, sp: SubPacket, config: Confi
         return False
     if customer_equivalent(customer, sp.primary_customer, config):
         return False
-    if page.form_code not in {"PO", "COA", "BIN_TAG", "PULL", "XC_USED", "SORT_OUT"}:
+    vendor_support_codes = {
+        "PO", "COA", "BIN_TAG", "PULL", "XC_USED", "SORT_OUT", "SHIP_LABEL",
+    }
+    if page.form_code not in vendor_support_codes:
         return False
     if sp.primary_wo and page_has_relevant_wo(page, {sp.primary_wo}):
         return False
@@ -1375,7 +1378,7 @@ def alternate_vendor_support_page(page: PageRecord, sp: SubPacket, config: Confi
         other for other in packet_pages
         if other.fields.get("customer")
         and customer_equivalent(other.fields["customer"], customer, config)
-        and other.form_code in {"PO", "COA", "BIN_TAG", "PULL", "XC_USED", "SORT_OUT"}
+        and other.form_code in vendor_support_codes
     ]
     return len(matching_vendor_pages) >= 2
 
@@ -1390,6 +1393,19 @@ def inferred_case_count_supported(fields: Dict[str, Any], inferred_cases: float)
         rf"(?:cases?|cs|bags?)[^0-9]{{0,12}}\b{re.escape(count)}\b",
         text,
     ))
+
+
+def corrected_total_from_row(fields: Dict[str, Any], total_lbs: float,
+                             unit_lbs: float) -> Optional[Tuple[float, int]]:
+    """Correct a decimal-shift total only when a case/bag row proves it."""
+    if total_lbs <= 0 or unit_lbs <= 0:
+        return None
+    for factor in (10, 100):
+        corrected_total = total_lbs / factor
+        inferred_cases = corrected_total / unit_lbs
+        if inferred_case_count_supported(fields, inferred_cases):
+            return corrected_total, int(round(inferred_cases))
+    return None
 
 
 def run_subpacket_checks(sp: SubPacket, config: Config,
@@ -1973,7 +1989,8 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                         [p.page_no], sub_packet=sp.index))
                     continue
                 unit = weight_units(p.fields)
-                expected = round(cs * (kg_to_lb(ulb) if unit == "kg" else ulb), 2)
+                comparison_unit_lbs = kg_to_lb(ulb) if unit == "kg" else ulb
+                expected = round(cs * comparison_unit_lbs, 2)
                 kind = weight_type(p.fields)
                 if tot is None:
                     sp.checks.append(CheckResult(
@@ -1998,17 +2015,26 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                     tot > 0
                     and inferred_case_count_supported(
                         p.fields,
-                        tot / (kg_to_lb(ulb) if unit == "kg" else ulb),
+                        tot / comparison_unit_lbs,
                     )
                 ):
-                    inferred_cases = round(
-                        tot / (kg_to_lb(ulb) if unit == "kg" else ulb)
-                    )
+                    inferred_cases = round(tot / comparison_unit_lbs)
                     sp.checks.append(CheckResult(
                         f"Total weight calc on {p.form_label} (p{p.page_no})",
                         "pass",
                         f"Page row shows {inferred_cases} cases/bags × {ulb} lb = "
                         f"{tot} lb; extracted page-level count {cs} is contextual/OCR noise.",
+                        [p.page_no], sub_packet=sp.index))
+                elif corrected_total_from_row(p.fields, tot, comparison_unit_lbs):
+                    corrected_total, inferred_cases = corrected_total_from_row(
+                        p.fields, tot, comparison_unit_lbs
+                    )
+                    sp.checks.append(CheckResult(
+                        f"Total weight calc on {p.form_label} (p{p.page_no})",
+                        "pass",
+                        f"Structured row supports {inferred_cases} cases/bags × "
+                        f"{ulb} lb = {corrected_total} lb; extracted total {tot} lb "
+                        f"has an OCR decimal-place shift.",
                         [p.page_no], sub_packet=sp.index))
                 else:
                     sp.checks.append(CheckResult(
