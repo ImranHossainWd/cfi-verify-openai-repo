@@ -427,6 +427,110 @@ class RuleNormalizationTests(unittest.TestCase):
         ]
         self.assertEqual(failures, [])
 
+    def test_repeated_alternate_vendor_po_pages_are_source_support(self):
+        vendor_page_1 = PageRecord(
+            15, "", "Customer PO", "PO",
+            {"customer": "Source Packing, Inc.", "wo": "99101", "product": "Apricots"},
+        )
+        vendor_page_2 = PageRecord(
+            16, "", "Customer PO", "PO",
+            {"customer": "Source Packing Inc", "wo": "99102", "product": "Apricots"},
+        )
+        sp = SubPacket(
+            index=1,
+            pages=[vendor_page_1, vendor_page_2],
+            primary_wo="11582",
+            primary_customer="Trader Joe's",
+            primary_product="Apricots",
+        )
+        packet_customer = self.config.find_customer("Trader Joe's")
+        run_subpacket_checks(
+            sp, self.config, packet_customer,
+            packet_pages=[vendor_page_1, vendor_page_2],
+        )
+        customer_failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name.startswith("Customer on Customer PO")
+        ]
+        required_failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name.startswith("Required form:")
+        ]
+        self.assertEqual(customer_failures, [])
+        self.assertEqual(required_failures, [])
+
+    def test_stamp_log_can_be_shared_by_product_across_work_orders(self):
+        current = PageRecord(
+            15, "", "Customer PO", "PO",
+            {"wo": "11582", "customer": "Example Customer", "product": "Apricots"},
+        )
+        shared_stamp = PageRecord(
+            40, "", "Stamp Log", "STAMP",
+            {"wo": "11583", "customer": "Example Customer", "product": "Apricots"},
+        )
+        sp = SubPacket(
+            index=0, pages=[current], primary_wo="11582",
+            primary_customer="Example Customer", primary_product="Apricots",
+        )
+        run_subpacket_checks(
+            sp, self.config, None, packet_pages=[current, shared_stamp],
+        )
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name == "Required form: Stamp Log"
+        ]
+        self.assertEqual(failures, [])
+
+    def test_weight_uses_supported_row_case_count_not_wrong_page_level_number(self):
+        fpp = PageRecord(
+            14, "", "Final Packed Product Sheet", "FPP",
+            {
+                "wo": "11582",
+                "customer": "Example Customer",
+                "cases": 100,
+                "unit_lbs": 25,
+                "total_lbs": 975,
+                "all_fields": {
+                    "right_table_rows": [
+                        {"cases_bags": "39 Bags", "unit_size_lbs": "25", "line_total_lbs": "975"}
+                    ]
+                },
+            },
+        )
+        sp = SubPacket(
+            index=0, pages=[fpp], primary_wo="11582",
+            primary_customer="Example Customer",
+        )
+        run_subpacket_checks(sp, self.config, None)
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name.startswith("Total weight calc")
+        ]
+        self.assertEqual(failures, [])
+
+    def test_weight_mismatch_still_fails_without_supporting_case_row(self):
+        fpp = PageRecord(
+            14, "", "Final Packed Product Sheet", "FPP",
+            {
+                "wo": "11582",
+                "customer": "Example Customer",
+                "cases": 100,
+                "unit_lbs": 25,
+                "total_lbs": 975,
+                "all_fields": {"unrelated": "no case row"},
+            },
+        )
+        sp = SubPacket(
+            index=0, pages=[fpp], primary_wo="11582",
+            primary_customer="Example Customer",
+        )
+        run_subpacket_checks(sp, self.config, None)
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name.startswith("Total weight calc")
+        ]
+        self.assertEqual(len(failures), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
