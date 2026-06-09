@@ -82,7 +82,13 @@ customers:
     notes: "Legal suffix variations are equivalent."
 
   - canonical: "Torn Glasser"
-    aliases: ["Torn Glasser", "Torn Glasser Inc", "Tom Glaser", "Tom Glaser Inc"]
+    aliases:
+      - "Torn Glasser"
+      - "Torn & Glasser"
+      - "Torn Glasser Inc"
+      - "Tom Glaser"
+      - "Tom Glaser Inc"
+      - "Tom & Gloescer"
     customer_code: ""
     co_packer_route: false
     requires_bol: true
