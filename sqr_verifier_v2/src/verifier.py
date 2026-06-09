@@ -1334,6 +1334,19 @@ def source_only_subpacket(sp: SubPacket, customer_profile: Optional[CustomerProf
                           config: Config) -> bool:
     if not sp.pages:
         return False
+    if customer_profile:
+        observed_customers = [
+            page.fields.get("customer") for page in sp.pages
+            if page.fields.get("customer")
+            and not is_processor_header_customer(page.fields.get("customer"))
+        ]
+        if observed_customers and all(
+            not customer_equivalent(customer, customer_profile.canonical, config)
+            for customer in observed_customers
+        ):
+            final_order_codes = {"SQR_CHK", "FPP", "PROD_REQ", "BOL", "TRAILER"}
+            if not any(page.form_code in final_order_codes for page in sp.pages):
+                return True
     if customer_profile and sp.primary_customer:
         different_customer = not customer_equivalent(
             sp.primary_customer, customer_profile.canonical, config
@@ -1346,11 +1359,45 @@ def source_only_subpacket(sp: SubPacket, customer_profile: Optional[CustomerProf
     return all(is_source_or_support_page(page) for page in sp.pages)
 
 
+def alternate_vendor_support_page(page: PageRecord, sp: SubPacket, config: Config,
+                                  packet_pages: List[PageRecord]) -> bool:
+    """Recognize repeated vendor/source paperwork even if grouping inherited the buyer."""
+    customer = page.fields.get("customer")
+    if not customer or not sp.primary_customer:
+        return False
+    if customer_equivalent(customer, sp.primary_customer, config):
+        return False
+    if page.form_code not in {"PO", "COA", "BIN_TAG", "PULL", "XC_USED", "SORT_OUT"}:
+        return False
+    if sp.primary_wo and page_has_relevant_wo(page, {sp.primary_wo}):
+        return False
+    matching_vendor_pages = [
+        other for other in packet_pages
+        if other.fields.get("customer")
+        and customer_equivalent(other.fields["customer"], customer, config)
+        and other.form_code in {"PO", "COA", "BIN_TAG", "PULL", "XC_USED", "SORT_OUT"}
+    ]
+    return len(matching_vendor_pages) >= 2
+
+
+def inferred_case_count_supported(fields: Dict[str, Any], inferred_cases: float) -> bool:
+    if inferred_cases <= 0 or abs(inferred_cases - round(inferred_cases)) > 0.01:
+        return False
+    count = str(int(round(inferred_cases)))
+    text = " ".join(str(value) for value in fields.values()).lower()
+    return bool(re.search(
+        rf"\b{re.escape(count)}\s*(?:cases?|cs|bags?)\b|"
+        rf"(?:cases?|cs|bags?)[^0-9]{{0,12}}\b{re.escape(count)}\b",
+        text,
+    ))
+
+
 def run_subpacket_checks(sp: SubPacket, config: Config,
                           customer_profile: Optional[CustomerProfile],
                           packet_pages: Optional[List[PageRecord]] = None) -> None:
     rules_cfg = config.rules
     sp_is_source_only = source_only_subpacket(sp, customer_profile, config)
+    all_packet_pages = packet_pages or sp.pages
 
     # Build the cross-reference map FIRST so every check can cite the pages
     # where the value also appears.
@@ -1518,7 +1565,12 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                         f"Customer = {pc} ✓" + (f" — {src}" if src else ""),
                         [p.page_no], sub_packet=sp.index))
                 elif pc and not customer_equivalent(pc, sp.primary_customer, config):
-                    if p.fields.get("is_backup_source") or is_source_or_support_page(p) or sp_is_source_only:
+                    if (
+                        p.fields.get("is_backup_source")
+                        or is_source_or_support_page(p)
+                        or sp_is_source_only
+                        or alternate_vendor_support_page(p, sp, config, all_packet_pages)
+                    ):
                         sp.checks.append(CheckResult(
                             f"Customer on {p.form_label} (p{p.page_no})",
                             "pass",
@@ -1556,7 +1608,6 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
     # level by the caller — they're shared across all sub-packets in a multi-WO order.)
     if rules_cfg.get("required_forms", {}).get("enabled", True):
         has = {p.form_code for p in sp.pages}
-        all_packet_pages = packet_pages or sp.pages
         support_only = sp_is_source_only
         for code, name in REQUIRED_FORMS_FOR_ANY_PACKET.items():
             if code not in PER_SUB_PACKET_FORMS:
@@ -1575,6 +1626,15 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                     page for page in all_packet_pages
                     if page.form_code == code and page_supports_subpacket(page, sp, config)
                 ]
+                if not shared_matches and code == "STAMP" and sp.primary_product:
+                    # Stamp logs are commonly shared across adjacent WOs in the
+                    # same product run. Product identity is sufficient here.
+                    shared_matches = [
+                        page for page in all_packet_pages
+                        if page.form_code == "STAMP"
+                        and normalize_company_name(page.fields.get("product", ""))
+                        == normalize_company_name(sp.primary_product)
+                    ]
                 if shared_matches:
                     sp.checks.append(CheckResult(
                         f"Required form: {name}", "pass",
@@ -1933,6 +1993,22 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                         "pass",
                         f"Calculated net is {expected} lb; documented {tot} lb is "
                         f"consistent with gross shipping weight including packaging.",
+                        [p.page_no], sub_packet=sp.index))
+                elif (
+                    tot > 0
+                    and inferred_case_count_supported(
+                        p.fields,
+                        tot / (kg_to_lb(ulb) if unit == "kg" else ulb),
+                    )
+                ):
+                    inferred_cases = round(
+                        tot / (kg_to_lb(ulb) if unit == "kg" else ulb)
+                    )
+                    sp.checks.append(CheckResult(
+                        f"Total weight calc on {p.form_label} (p{p.page_no})",
+                        "pass",
+                        f"Page row shows {inferred_cases} cases/bags × {ulb} lb = "
+                        f"{tot} lb; extracted page-level count {cs} is contextual/OCR noise.",
                         [p.page_no], sub_packet=sp.index))
                 else:
                     sp.checks.append(CheckResult(
