@@ -23,6 +23,7 @@ from verifier import (
     normalize_company_name,
     normalize_po,
     office_signoff_present,
+    page_has_relevant_po,
     po_equivalent,
     run_subpacket_checks,
     wo_equivalent,
@@ -45,6 +46,8 @@ class RuleNormalizationTests(unittest.TestCase):
         self.assertTrue(customer_equivalent("Capitol Food Company - Fresca Warehouse", "Capitol Food Co", self.config))
         self.assertTrue(customer_equivalent("TROPICON FOODS c/o LINEAGE LOGISTICS", "Tropicon Foods, Inc.", self.config))
         self.assertTrue(customer_equivalent("New Customer LLC c/o Cold Storage", "New Customer", self.config))
+        self.assertTrue(customer_equivalent("New Customer, Inc. (A.M.S.)", "New Customer", self.config))
+        self.assertTrue(customer_equivalent("Tom & Gloescer", "Torn & Glasser", self.config))
 
     def test_company_normalization_is_conservative(self):
         self.assertNotEqual(normalize_company_name("Trader Joe's"), normalize_company_name("Capitol Food Co"))
@@ -54,13 +57,24 @@ class RuleNormalizationTests(unittest.TestCase):
         self.assertEqual(normalize_carrier("Best Overnite Express"), normalize_carrier("Best overnight"))
         self.assertEqual(normalize_carrier("Vector Logistics"), normalize_carrier("Vektor Logistics"))
         self.assertEqual(normalize_carrier("FedEx"), normalize_carrier("FedEx Freight"))
+        self.assertEqual(normalize_carrier("T Force"), normalize_carrier("TForce Inc"))
         self.assertEqual(normalize_carrier("Carrier"), "")
+        self.assertEqual(normalize_carrier("name of trucking company delivering to customer"), "")
 
     def test_po_formatting(self):
         self.assertEqual(normalize_po("PO-0015520"), normalize_po("15520"))
         self.assertTrue(po_equivalent("Verbal/Hugh 4/25/2026", "VERBAL/HUGH4/25/26"))
         self.assertTrue(po_equivalent("Vega/Hugh 4/25/26", "VERBAL/HUGH4/25/26"))
         self.assertTrue(po_equivalent("260941601", "26041601"))
+        self.assertTrue(po_equivalent("16196", "161596"))
+        self.assertTrue(po_equivalent("132129-1", "1321391"))
+
+    def test_page_po_candidates_override_wrong_first_read(self):
+        page = PageRecord(
+            9, "", "Trailer / Cargo Inspection", "TRAILER",
+            {"po": "16196", "po_candidates": ["161596"]},
+        )
+        self.assertTrue(page_has_relevant_po(page, "161596"))
 
     def test_wo_ocr_tolerance(self):
         self.assertTrue(wo_equivalent("1593", "11583"))
@@ -289,6 +303,127 @@ class RuleNormalizationTests(unittest.TestCase):
             if check.status == "fail"
             and check.pages == [69]
             and check.name.startswith("PO# on Extra Cases USED form")
+        ]
+        self.assertEqual(failures, [])
+
+    def test_pretest_values_are_not_compared_to_final_coa_stage(self):
+        coa = PageRecord(
+            6, "", "Certificate of Analysis", "COA",
+            {"wo": "11607", "customer": "Example Customer", "moisture_pct": 28.0, "sulfur_ppm": 1920},
+        )
+        pretest = PageRecord(
+            23, "", "Pre-Test", "PRETEST",
+            {"wo": "11607", "customer": "Example Customer", "moisture_pct": 27.5, "sulfur_ppm": 1856},
+        )
+        sp = SubPacket(
+            index=0, pages=[coa, pretest], primary_wo="11607",
+            primary_customer="Example Customer",
+        )
+        run_subpacket_checks(sp, self.config, None)
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail"
+            and ("Moisture cross-page" in check.name or "Sulfur ppm cross-page" in check.name)
+        ]
+        self.assertEqual(failures, [])
+
+    def test_gross_shipping_weight_can_exceed_calculated_net(self):
+        po_page = PageRecord(
+            3, "", "Customer PO", "PO",
+            {
+                "wo": "11605", "po": "123456", "customer": "Example Customer",
+                "cases": 80, "unit_lbs": 25, "total_lbs": 2040,
+                "all_fields": {"weight label": "Gross Weight"},
+            },
+        )
+        sp = SubPacket(
+            index=0, pages=[po_page], primary_wo="11605",
+            primary_po="123456", primary_customer="Example Customer",
+        )
+        run_subpacket_checks(sp, self.config, None)
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name.startswith("Total weight calc")
+        ]
+        self.assertEqual(failures, [])
+
+    def test_required_form_can_match_elsewhere_by_wo(self):
+        current = PageRecord(
+            5, "", "Final Packed Product Sheet", "FPP",
+            {"wo": "11609", "customer": "Example Customer", "product": "Raisins"},
+        )
+        shared_coa = PageRecord(
+            64, "", "Certificate of Analysis", "COA",
+            {"wo": "11609", "customer": "Example Customer", "product": "Raisins"},
+        )
+        shared_stamp = PageRecord(
+            65, "", "Stamp Log", "STAMP",
+            {"wo": "11609", "customer": "Example Customer", "product": "Raisins"},
+        )
+        sp = SubPacket(
+            index=1, pages=[current], primary_wo="11609",
+            primary_customer="Example Customer", primary_product="Raisins",
+        )
+        run_subpacket_checks(
+            sp, self.config, None,
+            packet_pages=[current, shared_coa, shared_stamp],
+        )
+        missing = [
+            check for check in sp.checks
+            if check.status == "fail"
+            and check.name in {
+                "Required form: Certificate of Analysis",
+                "Required form: Stamp Log",
+            }
+        ]
+        self.assertEqual(missing, [])
+
+    def test_source_vendor_subpacket_does_not_require_final_order_forms(self):
+        vendor_po = PageRecord(
+            6, "", "Customer PO", "PO",
+            {"customer": "Source Vendor Inc.", "product": "Apricots", "wo": "99881"},
+        )
+        sp = SubPacket(
+            index=1, pages=[vendor_po], primary_wo="99881",
+            primary_customer="Source Vendor Inc.", primary_product="Apricots",
+        )
+        packet_customer = self.config.find_customer("Trader Joe's")
+        run_subpacket_checks(sp, self.config, packet_customer, packet_pages=[vendor_po])
+        required_failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name.startswith("Required form:")
+        ]
+        customer_failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name.startswith("Customer on")
+        ]
+        self.assertEqual(required_failures, [])
+        self.assertEqual(customer_failures, [])
+
+    def test_source_wo_quantity_is_not_added_to_final_order_total(self):
+        sqr = PageRecord(
+            4, "", "SQR Checkoff List", "SQR_CHK",
+            {"wo": "11610", "customer": "Example Customer", "cases": 70},
+        )
+        source_coa = PageRecord(
+            12, "", "Source COA", "COA",
+            {
+                "wo": "11500", "customer": "Source Vendor", "cases": 170,
+                "all_fields": {"source lot": "original lot"},
+            },
+        )
+        bol = PageRecord(
+            7, "", "Bill of Lading", "BOL",
+            {"wo": "11610", "customer": "Example Customer", "cases": 70},
+        )
+        sp = SubPacket(
+            index=0, pages=[sqr, source_coa, bol], primary_wo="11610",
+            primary_customer="Example Customer",
+        )
+        run_subpacket_checks(sp, self.config, None)
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name.startswith("Case count on Bill of Lading")
         ]
         self.assertEqual(failures, [])
 
