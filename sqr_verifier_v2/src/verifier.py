@@ -290,6 +290,9 @@ LEGAL_SUFFIXES = {
 def normalize_company_name(value: str) -> str:
     text = re.sub(r"\bc\s*/\s*o\b.*$", "", str(value or ""), flags=re.I)
     text = re.split(r"\s+-\s+|,?\s+(?:warehouse|cold\s*storage|logistics|distribution|destination|ship\s*to)\b", text, flags=re.I)[0]
+    # Division/account annotations such as "(A.M.S.)" do not change the
+    # customer identity.
+    text = re.sub(r"\s*\([^)]{1,40}\)\s*$", "", text)
     words = re.findall(r"[a-z0-9]+", text.lower())
     while words and words[-1] in LEGAL_SUFFIXES:
         words.pop()
@@ -316,10 +319,17 @@ def customer_equivalent(a: str, b: str, config: Config) -> bool:
 
 def normalize_carrier(value: str) -> str:
     text = re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
-    if not text or text == "carrier":
+    if (
+        not text
+        or text == "carrier"
+        or ("name" in text and "trucking company" in text)
+        or text in {"trucking company", "carrier name", "name of carrier"}
+    ):
         return ""
     if "fedex" in text or "fed ex" in text:
         return "fedex"
+    if re.search(r"\bt\s*force\b", text):
+        return "tforce"
     if "vector" in text or "vektor" in text:
         return "vector logistics"
     if "best" in text and ("overnite" in text or "overnight" in text):
@@ -345,7 +355,24 @@ def po_equivalent(a: str, b: str) -> bool:
         return False
     if na == nb or na in nb or nb in na:
         return True
+    if na.isdigit() and nb.isdigit() and min(len(na), len(nb)) >= 5:
+        # Handwritten identifiers commonly lose/insert/substitute one digit.
+        # Keep this narrow: one edit only, and only for reasonably long POs.
+        if abs(len(na) - len(nb)) <= 1:
+            if len(na) == len(nb):
+                return sum(ca != cb for ca, cb in zip(na, nb)) <= 1
+            shorter, longer = (na, nb) if len(na) < len(nb) else (nb, na)
+            return any(longer[:idx] + longer[idx + 1:] == shorter for idx in range(len(longer)))
     return min(len(na), len(nb)) >= 6 and difflib.SequenceMatcher(None, na, nb).ratio() >= 0.88
+
+
+def page_has_relevant_po(page: "PageRecord", primary_po: str) -> bool:
+    candidates = [page.fields.get("po"), page.fields.get("highlighted_po")]
+    candidates.extend(page.fields.get("po_candidates") or [])
+    if any(candidate and po_equivalent(candidate, primary_po) for candidate in candidates):
+        return True
+    raw = " ".join(str(v) for v in (page.fields, page.notes))
+    return text_has_value(raw, normalize_po(primary_po))
 
 
 def wo_equivalent(a: str, b: str) -> bool:
@@ -1286,9 +1313,44 @@ def reconcile_no_new_wo_pages(sp: SubPacket) -> None:
             )
 
 
+def page_supports_subpacket(page: PageRecord, sp: SubPacket, config: Config) -> bool:
+    """Match shared/misgrouped forms using identity evidence, not page position."""
+    if sp.primary_wo and page_has_relevant_wo(page, {sp.primary_wo}):
+        return True
+    page_product = normalize_company_name(page.fields.get("product", ""))
+    sp_product = normalize_company_name(sp.primary_product or "")
+    product_match = bool(
+        page_product and sp_product
+        and (page_product == sp_product or page_product in sp_product or sp_product in page_product)
+    )
+    customer_match = bool(
+        page.fields.get("customer") and sp.primary_customer
+        and customer_equivalent(page.fields["customer"], sp.primary_customer, config)
+    )
+    return product_match and customer_match
+
+
+def source_only_subpacket(sp: SubPacket, customer_profile: Optional[CustomerProfile],
+                          config: Config) -> bool:
+    if not sp.pages:
+        return False
+    if customer_profile and sp.primary_customer:
+        different_customer = not customer_equivalent(
+            sp.primary_customer, customer_profile.canonical, config
+        )
+        final_order_codes = {"SQR_CHK", "FPP", "PROD_REQ", "BOL", "TRAILER"}
+        if different_customer and not any(
+            page.form_code in final_order_codes for page in sp.pages
+        ):
+            return True
+    return all(is_source_or_support_page(page) for page in sp.pages)
+
+
 def run_subpacket_checks(sp: SubPacket, config: Config,
-                          customer_profile: Optional[CustomerProfile]) -> None:
+                          customer_profile: Optional[CustomerProfile],
+                          packet_pages: Optional[List[PageRecord]] = None) -> None:
     rules_cfg = config.rules
+    sp_is_source_only = source_only_subpacket(sp, customer_profile, config)
 
     # Build the cross-reference map FIRST so every check can cite the pages
     # where the value also appears.
@@ -1407,17 +1469,29 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                             f"is not compared to final-order PO {sp.primary_po}.",
                             [p.page_no], sub_packet=sp.index))
                         continue
-                    if po_equivalent(ppo, sp.primary_po):
+                    if po_equivalent(ppo, sp.primary_po) or page_has_relevant_po(p, sp.primary_po):
                         src = cross_ref_summary(crm, "po", p.page_no)
                         msg = f"PO# {ppo} ✓" + (f" — {src}" if src else "")
                         sp.checks.append(CheckResult(
                             f"PO# on {p.form_label} (p{p.page_no})",
                             "pass", msg,
                             [p.page_no], sub_packet=sp.index))
+                    elif (
+                        p.form_code == "INV"
+                        and normalize_po(ppo).isdigit()
+                        and len(normalize_po(ppo)) <= 4
+                        and len(normalize_po(sp.primary_po)) >= 6
+                    ):
+                        sp.checks.append(CheckResult(
+                            f"PO# on {p.form_label} (p{p.page_no})",
+                            "pass",
+                            f"{ppo} appears to be a short account/reference number, "
+                            f"not the packet PO {sp.primary_po}.",
+                            [p.page_no], sub_packet=sp.index))
                     else:
                         # Loose match: substring (handles 289017 vs 289017-2)
                         a = normalize_po(ppo)
-                        b = sp.primary_po
+                        b = normalize_po(sp.primary_po)
                         if a in b or b in a:
                             sp.checks.append(CheckResult(
                                 f"PO# on {p.form_label} (p{p.page_no})",
@@ -1444,7 +1518,7 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                         f"Customer = {pc} ✓" + (f" — {src}" if src else ""),
                         [p.page_no], sub_packet=sp.index))
                 elif pc and not customer_equivalent(pc, sp.primary_customer, config):
-                    if p.fields.get("is_backup_source") or is_source_or_support_page(p):
+                    if p.fields.get("is_backup_source") or is_source_or_support_page(p) or sp_is_source_only:
                         sp.checks.append(CheckResult(
                             f"Customer on {p.form_label} (p{p.page_no})",
                             "pass",
@@ -1482,6 +1556,8 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
     # level by the caller — they're shared across all sub-packets in a multi-WO order.)
     if rules_cfg.get("required_forms", {}).get("enabled", True):
         has = {p.form_code for p in sp.pages}
+        all_packet_pages = packet_pages or sp.pages
+        support_only = sp_is_source_only
         for code, name in REQUIRED_FORMS_FOR_ANY_PACKET.items():
             if code not in PER_SUB_PACKET_FORMS:
                 continue
@@ -1489,10 +1565,27 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                 sp.checks.append(CheckResult(
                     f"Required form: {name}", "pass",
                     "Found in sub-packet", [], sub_packet=sp.index))
-            else:
+            elif support_only:
                 sp.checks.append(CheckResult(
-                    f"Required form: {name}", "fail",
-                    "Not detected in this sub-packet", [], sub_packet=sp.index))
+                    f"Required form: {name}", "pass",
+                    "Source/support-only sub-packet; final-order form is not required.",
+                    [], sub_packet=sp.index))
+            else:
+                shared_matches = [
+                    page for page in all_packet_pages
+                    if page.form_code == code and page_supports_subpacket(page, sp, config)
+                ]
+                if shared_matches:
+                    sp.checks.append(CheckResult(
+                        f"Required form: {name}", "pass",
+                        f"Matched elsewhere in packet on pages "
+                        f"{[page.page_no for page in shared_matches]} by WO/product/customer.",
+                        [page.page_no for page in shared_matches], sub_packet=sp.index))
+                else:
+                    sp.checks.append(CheckResult(
+                        f"Required form: {name}", "fail",
+                        "Not detected for this WO/product/customer anywhere in packet",
+                        [], sub_packet=sp.index))
 
     # (Trader Joe's exception + BOL/Trailer-Cargo presence are checked at
     # packet level since they apply to the whole order, not per WO.)
@@ -1510,6 +1603,20 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
         # order (e.g. Trailer/Cargo p11 = 50+30+30+30 = 140 cs for Pedrick).
         # Per-WO forms (COA, SQR-XC, Stamp Log, etc.) list their own WO's count.
         ORDER_LEVEL_FORMS = {"FPP", "BOL", "TRAILER", "INV"}
+        current_order_wos = {sp.primary_wo} if sp.primary_wo else set()
+        for p in sp.pages:
+            if p.form_code not in {"SQR_CHK", "PROD_REQ", "FPP", "BOL", "TRAILER"}:
+                continue
+            if is_source_or_support_page(p):
+                continue
+            if (
+                p.fields.get("customer") and sp.primary_customer
+                and not customer_equivalent(p.fields["customer"], sp.primary_customer, config)
+            ):
+                continue
+            if p.fields.get("wo"):
+                current_order_wos.add(p.fields["wo"])
+            current_order_wos.update(p.fields.get("wo_candidates") or [])
 
         # Collect case counts per WO across the sub-packet
         cases_by_wo: Dict[str, Counter] = {}
@@ -1521,6 +1628,7 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                 and p.form_code in CASE_BASELINE_FORMS
                 and not is_source_or_support_page(p)
                 and (not known_wos or wo in known_wos)
+                and (not current_order_wos or any(wo_equivalent(wo, current) for current in current_order_wos))
             ):
                 cases_by_wo.setdefault(wo, Counter())[round(cs)] += 1
         # Primary case count per WO = most common
@@ -1777,7 +1885,9 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                     f"{label} = {primary[0]} on pages {primary[1]}",
                     primary[1], sub_packet=sp.index))
 
-    _cross_match_field("moisture_pct", "Moisture",  restrict_to=PRIMARY_QC_FORMS)
+    # Pre-Test and final COA/SQR values represent different testing stages.
+    # Cross-compare final/current-stage forms only.
+    _cross_match_field("moisture_pct", "Moisture",  restrict_to=PRIMARY_QC_FORMS - {"PRETEST"})
     _cross_match_field("sulfur_ppm",   "Sulfur ppm", restrict_to=PRIMARY_QC_FORMS - {"PRETEST"})
     _cross_match_field("crop_year",    "Crop year",  restrict_to=PRIMARY_QC_FORMS)
     _cross_match_field(
@@ -1817,11 +1927,12 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                         "pass",
                         f"{cs} cs × {ulb} lb = {tot} lb ✓", [p.page_no],
                         sub_packet=sp.index))
-                elif kind == "gross" and expected <= tot <= expected * 1.15:
+                elif expected <= tot <= expected * 1.15:
                     sp.checks.append(CheckResult(
                         f"Total weight calc on {p.form_label} (p{p.page_no})",
                         "pass",
-                        f"Calculated net is {expected} lb; documented {tot} lb is gross shipping weight.",
+                        f"Calculated net is {expected} lb; documented {tot} lb is "
+                        f"consistent with gross shipping weight including packaging.",
                         [p.page_no], sub_packet=sp.index))
                 else:
                     sp.checks.append(CheckResult(
@@ -2691,7 +2802,7 @@ def verify_pdf(pdf_path: str, out_dir: str,
     for sp in sub_packets:
         determine_primary_values(sp)
         reconcile_no_new_wo_pages(sp)
-        run_subpacket_checks(sp, config, report.customer_profile)
+        run_subpacket_checks(sp, config, report.customer_profile, packet_pages=pages)
 
     # 5b. Packet-level rules (forms shared across all WOs in the order)
     has_in_packet = {p.form_code for p in pages}
