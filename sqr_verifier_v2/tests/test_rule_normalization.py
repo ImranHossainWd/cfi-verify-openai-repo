@@ -433,7 +433,7 @@ class RuleNormalizationTests(unittest.TestCase):
             {"customer": "Source Packing, Inc.", "wo": "99101", "product": "Apricots"},
         )
         vendor_page_2 = PageRecord(
-            16, "", "Customer PO", "PO",
+            20, "", "Shipping label", "SHIP_LABEL",
             {"customer": "Source Packing Inc", "wo": "99102", "product": "Apricots"},
         )
         sp = SubPacket(
@@ -450,7 +450,11 @@ class RuleNormalizationTests(unittest.TestCase):
         )
         customer_failures = [
             check for check in sp.checks
-            if check.status == "fail" and check.name.startswith("Customer on Customer PO")
+            if check.status == "fail"
+            and (
+                check.name.startswith("Customer on Customer PO")
+                or check.name.startswith("Customer on Shipping label")
+            )
         ]
         required_failures = [
             check for check in sp.checks
@@ -489,7 +493,7 @@ class RuleNormalizationTests(unittest.TestCase):
                 "customer": "Example Customer",
                 "cases": 100,
                 "unit_lbs": 25,
-                "total_lbs": 975,
+                "total_lbs": 9750,
                 "all_fields": {
                     "right_table_rows": [
                         {"cases_bags": "39 Bags", "unit_size_lbs": "25", "line_total_lbs": "975"}
@@ -516,7 +520,7 @@ class RuleNormalizationTests(unittest.TestCase):
                 "customer": "Example Customer",
                 "cases": 100,
                 "unit_lbs": 25,
-                "total_lbs": 975,
+                "total_lbs": 9750,
                 "all_fields": {"unrelated": "no case row"},
             },
         )
