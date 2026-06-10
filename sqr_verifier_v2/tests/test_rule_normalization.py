@@ -48,6 +48,9 @@ class RuleNormalizationTests(unittest.TestCase):
         self.assertTrue(customer_equivalent("New Customer LLC c/o Cold Storage", "New Customer", self.config))
         self.assertTrue(customer_equivalent("New Customer, Inc. (A.M.S.)", "New Customer", self.config))
         self.assertTrue(customer_equivalent("Tom & Gloescer", "Torn & Glasser", self.config))
+        self.assertTrue(customer_equivalent("Tom & Gleessr", "Torn & Glasser", self.config))
+        self.assertTrue(customer_equivalent("Narth Valley", "North Velley", self.config))
+        self.assertFalse(customer_equivalent("North Valley", "South Harbor", self.config))
 
     def test_company_normalization_is_conservative(self):
         self.assertNotEqual(normalize_company_name("Trader Joe's"), normalize_company_name("Capitol Food Co"))
@@ -58,6 +61,8 @@ class RuleNormalizationTests(unittest.TestCase):
         self.assertEqual(normalize_carrier("Vector Logistics"), normalize_carrier("Vektor Logistics"))
         self.assertEqual(normalize_carrier("FedEx"), normalize_carrier("FedEx Freight"))
         self.assertEqual(normalize_carrier("T Force"), normalize_carrier("TForce Inc"))
+        self.assertEqual(normalize_carrier("Xpress Global"), normalize_carrier("Xpress Global LLC XGS1"))
+        self.assertEqual(normalize_carrier("Xpress Global LLC"), normalize_carrier("Xpress Global LLC XGS1"))
         self.assertEqual(normalize_carrier("Carrier"), "")
         self.assertEqual(normalize_carrier("name of trucking company delivering to customer"), "")
 
@@ -378,6 +383,84 @@ class RuleNormalizationTests(unittest.TestCase):
         ]
         self.assertEqual(missing, [])
 
+    def test_source_coa_can_match_through_extra_case_source_wo(self):
+        current = PageRecord(
+            10, "", "SQR Checkoff List", "SQR_CHK",
+            {
+                "wo": "11620", "customer": "Benzler Farms",
+                "product": "Golden Raisins",
+            },
+        )
+        bridge = PageRecord(
+            51, "", "SQR (Extra Case)", "SQR_XC",
+            {
+                "wo": "11620", "customer": "Benzler Farms",
+                "product": "Golden Raisins",
+                "all_fields": {"original WO": "11552"},
+            },
+        )
+        source_coa = PageRecord(
+            59, "", "Certificate of Analysis", "COA",
+            {
+                "wo": "11552", "customer": "Lone Star",
+                "product": "Golden Raisins", "cases": 451,
+                "all_fields": {"source lot": "original lot support"},
+            },
+        )
+        sp = SubPacket(
+            index=0, pages=[current], primary_wo="11620",
+            primary_customer="Benzler Farms", primary_product="Golden Raisins",
+        )
+        run_subpacket_checks(
+            sp, self.config, self.config.find_customer("Benzler Farms"),
+            packet_pages=[current, bridge, source_coa],
+        )
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail"
+            and check.name == "Required form: Certificate of Analysis"
+        ]
+        self.assertEqual(failures, [])
+
+    def test_unrelated_source_coa_does_not_satisfy_required_form(self):
+        current = PageRecord(
+            10, "", "SQR Checkoff List", "SQR_CHK",
+            {
+                "wo": "11620", "customer": "Example Customer",
+                "product": "Golden Raisins",
+            },
+        )
+        bridge = PageRecord(
+            51, "", "SQR (Extra Case)", "SQR_XC",
+            {
+                "wo": "11620", "customer": "Example Customer",
+                "product": "Golden Raisins",
+                "all_fields": {"original WO": "11552"},
+            },
+        )
+        unrelated_coa = PageRecord(
+            59, "", "Certificate of Analysis", "COA",
+            {
+                "wo": "99999", "customer": "Other Source",
+                "product": "Pitted Prunes",
+                "all_fields": {"source lot": "unrelated original lot"},
+            },
+        )
+        sp = SubPacket(
+            index=0, pages=[current], primary_wo="11620",
+            primary_customer="Example Customer", primary_product="Golden Raisins",
+        )
+        run_subpacket_checks(
+            sp, self.config, None,
+            packet_pages=[current, bridge, unrelated_coa],
+        )
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail"
+            and check.name == "Required form: Certificate of Analysis"
+        ]
+        self.assertEqual(len(failures), 1)
+
     def test_source_vendor_subpacket_does_not_require_final_order_forms(self):
         vendor_po = PageRecord(
             6, "", "Customer PO", "PO",
@@ -398,6 +481,28 @@ class RuleNormalizationTests(unittest.TestCase):
             if check.status == "fail" and check.name.startswith("Customer on")
         ]
         self.assertEqual(required_failures, [])
+        self.assertEqual(customer_failures, [])
+
+    def test_copacker_vendor_po_is_support_even_when_current_wo_is_present(self):
+        vendor_po = PageRecord(
+            15, "", "Customer PO", "PO",
+            {
+                "customer": "Garry Packing, Inc.", "wo": "11582",
+                "product": "Apricots",
+            },
+        )
+        sp = SubPacket(
+            index=0, pages=[vendor_po], primary_wo="11582",
+            primary_customer="Trader Joe's", primary_product="Apricots",
+        )
+        run_subpacket_checks(
+            sp, self.config, None, packet_pages=[vendor_po],
+        )
+        customer_failures = [
+            check for check in sp.checks
+            if check.status == "fail"
+            and check.name.startswith("Customer on Customer PO")
+        ]
         self.assertEqual(customer_failures, [])
 
     def test_source_wo_quantity_is_not_added_to_final_order_total(self):
