@@ -18,6 +18,32 @@
       <h2>Verification</h2>
       <span id="message">{{ job.message }}</span>
     </div>
+    {% if job.status in ["queued", "running"] %}
+    <div class="packet-progress" id="packetProgress">
+      <div class="packet-progress__head">
+        <strong id="progressStage">{{ job.progress_stage or job.message or "Preparing packet" }}</strong>
+        <span id="progressPercent">{{ job.progress_percent or 0 }}%</span>
+      </div>
+      <div
+        class="progress-track"
+        id="progressTrack"
+        role="progressbar"
+        aria-label="Packet verification progress"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="{{ job.progress_percent or 0 }}"
+      >
+        <span id="progressFill" style="width: {{ job.progress_percent or 0 }}%"></span>
+      </div>
+      <small id="progressPages">
+        {% if job.total_pages %}
+          {{ job.processed_pages or 0 }} of {{ job.total_pages }} pages processed
+        {% else %}
+          Calculating page count
+        {% endif %}
+      </small>
+    </div>
+    {% endif %}
     {% if job.summary %}
       <div class="metrics metrics--three">
         <div><strong>{{ job.summary.overall }}</strong><small>Overall</small></div>
@@ -562,6 +588,21 @@ async function refreshJob() {
   document.getElementById("status").textContent = job.status;
   document.getElementById("status").className = `status ${job.status}`;
   document.getElementById("message").textContent = job.message || "";
+  const percent = Math.max(0, Math.min(100, Number(job.progress_percent || 0)));
+  const fill = document.getElementById("progressFill");
+  const percentLabel = document.getElementById("progressPercent");
+  const stage = document.getElementById("progressStage");
+  const pages = document.getElementById("progressPages");
+  const track = document.getElementById("progressTrack");
+  if (fill) fill.style.width = `${percent}%`;
+  if (percentLabel) percentLabel.textContent = `${percent}%`;
+  if (stage) stage.textContent = job.progress_stage || job.message || "Processing packet";
+  if (track) track.setAttribute("aria-valuenow", String(percent));
+  if (pages) {
+    pages.textContent = job.total_pages
+      ? `${job.processed_pages || 0} of ${job.total_pages} pages processed`
+      : "Calculating page count";
+  }
   if (job.status === "complete" || job.status === "failed") window.location.reload();
 }
 setInterval(refreshJob, 3000);

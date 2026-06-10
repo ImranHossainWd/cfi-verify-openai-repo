@@ -59,7 +59,22 @@
           <span class="score {{ job.summary.overall|lower }}">{{ job.summary.overall }}</span>
           <span class="counts">{{ job.summary.pass_count }} pass &middot; {{ job.summary.fail_count }} flags</span>
         {% else %}
-          <span class="counts">{{ job.message }}</span>
+          <span class="job-progress job-progress--compact" data-job-progress="{{ job.id }}">
+            <span class="job-progress__meta">
+              <small data-progress-stage>{{ job.progress_stage or job.message }}</small>
+              <strong data-progress-percent>{{ job.progress_percent or 0 }}%</strong>
+            </span>
+            <span
+              class="progress-track"
+              role="progressbar"
+              aria-label="{{ job.packet_name }} verification progress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="{{ job.progress_percent or 0 }}"
+            >
+              <span data-progress-fill style="width: {{ job.progress_percent or 0 }}%"></span>
+            </span>
+          </span>
         {% endif %}
       </a>
       {% endfor %}
@@ -68,4 +83,29 @@
     <p class="empty">No packets match these filters.</p>
   {% endif %}
 </section>
+{% if jobs %}
+<script>
+const activeProgressRows = [...document.querySelectorAll("[data-job-progress]")];
+async function refreshPacketListProgress() {
+  let shouldReload = false;
+  await Promise.all(activeProgressRows.map(async (row) => {
+    const response = await fetch(`/api/jobs/${row.dataset.jobProgress}`);
+    if (!response.ok) return;
+    const job = await response.json();
+    if (job.status === "complete" || job.status === "failed") {
+      shouldReload = true;
+      return;
+    }
+    const percent = Math.max(0, Math.min(100, Number(job.progress_percent || 0)));
+    row.querySelector("[data-progress-percent]").textContent = `${percent}%`;
+    row.querySelector("[data-progress-stage]").textContent =
+      job.progress_stage || job.message || "Processing packet";
+    row.querySelector("[data-progress-fill]").style.width = `${percent}%`;
+    row.querySelector("[role='progressbar']").setAttribute("aria-valuenow", String(percent));
+  }));
+  if (shouldReload) window.location.reload();
+}
+setInterval(refreshPacketListProgress, 3000);
+</script>
+{% endif %}
 {% endblock %}
