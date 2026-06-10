@@ -313,6 +313,22 @@ def customer_equivalent(a: str, b: str, config: Config) -> bool:
         return True
     if min(len(na), len(nb)) >= 6 and (na.startswith(nb) or nb.startswith(na)):
         return True
+    words_a = [
+        word for word in re.findall(r"[a-z0-9]+", str(a).lower())
+        if word not in LEGAL_SUFFIXES
+    ]
+    words_b = [
+        word for word in re.findall(r"[a-z0-9]+", str(b).lower())
+        if word not in LEGAL_SUFFIXES
+    ]
+    if len(words_a) == len(words_b) and len(words_a) >= 2:
+        token_pairs = list(zip(words_a, words_b))
+        if all(
+            left[0] == right[0]
+            and difflib.SequenceMatcher(None, left, right).ratio() >= 0.55
+            for left, right in token_pairs
+        ):
+            return True
     # Conservative OCR tolerance for longer company names only.
     return min(len(na), len(nb)) >= 8 and difflib.SequenceMatcher(None, na, nb).ratio() >= 0.90
 
@@ -336,10 +352,16 @@ def normalize_carrier(value: str) -> str:
         return "best overnite"
     if "ups" in text:
         return "ups"
-    return " ".join(
+    words = [
         word for word in text.split()
-        if word not in {"freight", "ground", "priority", "express", "service", "systems"}
-    )
+        if word not in {
+            "freight", "ground", "priority", "express", "service", "services",
+            "systems", "inc", "llc", "ltd", "company", "co", "corporation", "corp",
+        }
+    ]
+    while words and re.fullmatch(r"[a-z]{2,6}\d{1,4}", words[-1]):
+        words.pop()
+    return " ".join(words)
 
 
 PROCESSOR_NAMES = {"californiafruit", "californiafruitbasket", "californiafruitinc"}
@@ -1330,6 +1352,76 @@ def page_supports_subpacket(page: PageRecord, sp: SubPacket, config: Config) -> 
     return product_match and customer_match
 
 
+def product_equivalent(a: str, b: str) -> bool:
+    na = re.sub(r"[^a-z0-9]+", "", str(a or "").lower())
+    nb = re.sub(r"[^a-z0-9]+", "", str(b or "").lower())
+    if not na or not nb:
+        return False
+    if na == nb or na in nb or nb in na:
+        return True
+    return min(len(na), len(nb)) >= 6 and difflib.SequenceMatcher(None, na, nb).ratio() >= 0.72
+
+
+def page_wo_values(page: PageRecord) -> set:
+    values = {
+        str(value)
+        for value in [
+            page.fields.get("wo"),
+            page.fields.get("highlighted_wo"),
+            *(page.fields.get("wo_candidates") or []),
+        ]
+        if value
+    }
+
+    def collect(value: Any, key_hint: str = "") -> None:
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                collect(nested, str(key))
+        elif isinstance(value, list):
+            for nested in value:
+                collect(nested, key_hint)
+        elif re.search(r"\b(?:wo|work\s*order)\b", key_hint, flags=re.I):
+            values.update(re.findall(r"\b\d{4,6}\b", str(value)))
+
+    collect(page.fields.get("all_fields") or {})
+    return values
+
+
+def source_coa_supports_subpacket(page: PageRecord, sp: SubPacket,
+                                  packet_pages: List[PageRecord],
+                                  config: Config) -> bool:
+    if page.form_code != "COA":
+        return False
+    source_forms = {"SQR_XC", "XC_USED", "BIN_TAG", "PULL", "SORT_OUT"}
+    source_pages = [
+        candidate for candidate in packet_pages
+        if candidate.form_code in source_forms
+        and (
+            candidate in sp.pages
+            or (
+                sp.primary_wo
+                and page_has_relevant_wo(candidate, {sp.primary_wo})
+            )
+            or page_supports_subpacket(candidate, sp, config)
+        )
+    ]
+    source_wos = set()
+    for candidate in source_pages:
+        for value in page_wo_values(candidate):
+            if value and not (
+                sp.primary_wo and wo_equivalent(value, sp.primary_wo)
+            ):
+                source_wos.add(value)
+    if source_wos and page_has_relevant_wo(page, source_wos):
+        return True
+    product_match = bool(
+        sp.primary_product
+        and page.fields.get("product")
+        and product_equivalent(page.fields["product"], sp.primary_product)
+    )
+    return bool(source_pages and product_match and is_source_or_support_page(page))
+
+
 def source_only_subpacket(sp: SubPacket, customer_profile: Optional[CustomerProfile],
                           config: Config) -> bool:
     if not sp.pages:
@@ -1360,7 +1452,8 @@ def source_only_subpacket(sp: SubPacket, customer_profile: Optional[CustomerProf
 
 
 def alternate_vendor_support_page(page: PageRecord, sp: SubPacket, config: Config,
-                                  packet_pages: List[PageRecord]) -> bool:
+                                  packet_pages: List[PageRecord],
+                                  customer_profile: Optional[CustomerProfile] = None) -> bool:
     """Recognize repeated vendor/source paperwork even if grouping inherited the buyer."""
     customer = page.fields.get("customer")
     if not customer or not sp.primary_customer:
@@ -1372,6 +1465,11 @@ def alternate_vendor_support_page(page: PageRecord, sp: SubPacket, config: Confi
     }
     if page.form_code not in vendor_support_codes:
         return False
+    effective_profile = customer_profile or config.find_customer(sp.primary_customer)
+    if effective_profile and effective_profile.co_packer_route:
+        # Co-packer routes legitimately include supplier/vendor PO and label
+        # paperwork under a different company name.
+        return True
     if sp.primary_wo and page_has_relevant_wo(page, {sp.primary_wo}):
         return False
     matching_vendor_pages = [
@@ -1585,7 +1683,9 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                         p.fields.get("is_backup_source")
                         or is_source_or_support_page(p)
                         or sp_is_source_only
-                        or alternate_vendor_support_page(p, sp, config, all_packet_pages)
+                        or alternate_vendor_support_page(
+                            p, sp, config, all_packet_pages, customer_profile
+                        )
                     ):
                         sp.checks.append(CheckResult(
                             f"Customer on {p.form_label} (p{p.page_no})",
@@ -1650,6 +1750,13 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                         if page.form_code == "STAMP"
                         and normalize_company_name(page.fields.get("product", ""))
                         == normalize_company_name(sp.primary_product)
+                    ]
+                if not shared_matches and code == "COA":
+                    shared_matches = [
+                        page for page in all_packet_pages
+                        if source_coa_supports_subpacket(
+                            page, sp, all_packet_pages, config
+                        )
                     ]
                 if shared_matches:
                     sp.checks.append(CheckResult(
