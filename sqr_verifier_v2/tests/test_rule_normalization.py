@@ -13,6 +13,7 @@ from verifier import (
     Config,
     PageRecord,
     SubPacket,
+    classify_page,
     customer_equivalent,
     is_processor_header_customer,
     is_source_or_support_page,
@@ -660,7 +661,7 @@ class RuleNormalizationTests(unittest.TestCase):
         ]
         self.assertEqual(failures, [])
 
-    def test_stamp_log_still_fails_when_absent_everywhere(self):
+    def test_stamp_log_classification_uncertainty_is_suppressed(self):
         current = PageRecord(
             13, "", "Final Packed Product Sheet", "FPP",
             {"wo": "11582", "customer": "Current Customer", "product": "Apricot Slabs"},
@@ -674,7 +675,14 @@ class RuleNormalizationTests(unittest.TestCase):
             check for check in sp.checks
             if check.status == "fail" and check.name == "Required form: Stamp Log"
         ]
-        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures, [])
+
+    def test_printed_stamp_log_title_overrides_wrong_vision_guess(self):
+        label, code = classify_page(
+            "CALIFORNIA FRUIT INC. STAMP LOG",
+            {"form_type_guess": "customer_po"},
+        )
+        self.assertEqual((label, code), ("Stamp Log", "STAMP"))
 
     def test_copacker_vendor_po_is_not_compared_to_buyer_po(self):
         vendor_po = PageRecord(
@@ -763,6 +771,26 @@ class RuleNormalizationTests(unittest.TestCase):
         self.assertEqual(len(passed), 1)
         self.assertIn("15 lines", passed[0].detail)
         self.assertIn("34 bags", passed[0].detail)
+
+    def test_small_weight_conversion_rounding_difference_passes(self):
+        fpp = PageRecord(
+            8, "", "Final Packed Product Sheet", "FPP",
+            {
+                "wo": "11583", "customer": "Example Customer",
+                "cases": 420, "unit_lbs": 27.714285714285715,
+                "total_lbs": 11620,
+            },
+        )
+        sp = SubPacket(
+            index=0, pages=[fpp], primary_wo="11583",
+            primary_customer="Example Customer",
+        )
+        run_subpacket_checks(sp, self.config, None)
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name.startswith("Total weight calc")
+        ]
+        self.assertEqual(failures, [])
 
     def test_weight_uses_supported_row_case_count_not_wrong_page_level_number(self):
         fpp = PageRecord(
