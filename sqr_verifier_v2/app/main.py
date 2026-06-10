@@ -45,7 +45,7 @@ from verifier import verify_pdf  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-06-07-dashboard-shell-v4"
+APP_VERSION = "2026-06-10-packet-progress-v1"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
@@ -1549,9 +1549,20 @@ def run_verification(job_id: str) -> None:
             job_id,
             status="queued",
             message=f"Waiting for another packet to finish. Limit is {MAX_CONCURRENT_PACKET_RUNS} active packet run(s).",
+            progress_percent=2,
+            progress_stage="Waiting in queue",
         )
         packet_run_semaphore.acquire()
-    job = update_job(job_id, status="running", started_at=utc_now(), message="Rendering and OCR are in progress")
+    job = update_job(
+        job_id,
+        status="running",
+        started_at=utc_now(),
+        message="Preparing packet verification",
+        progress_percent=5,
+        progress_stage="Preparing packet",
+        processed_pages=0,
+        total_pages=0,
+    )
     try:
         provider = job["vision_provider"]
         if provider == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
@@ -1559,6 +1570,25 @@ def run_verification(job_id: str) -> None:
         if provider == "openai" and not os.environ.get("OPENAI_API_KEY"):
             raise RuntimeError("OPENAI_API_KEY is not set in the Render environment.")
         cache_path: Optional[str] = str(VISION_CACHE) if provider == "mock" and VISION_CACHE.exists() else None
+        last_progress = {"percent": -1, "message": ""}
+
+        def save_progress(percent: int, message: str, processed: int, total: int) -> None:
+            clean_percent = max(0, min(99, int(percent)))
+            if (
+                clean_percent == last_progress["percent"]
+                and message == last_progress["message"]
+            ):
+                return
+            last_progress.update(percent=clean_percent, message=message)
+            update_job(
+                job_id,
+                progress_percent=clean_percent,
+                progress_stage=message,
+                message=message,
+                processed_pages=processed,
+                total_pages=total,
+            )
+
         report = verify_pdf(
             pdf_path=job["input_path"],
             out_dir=job["output_dir"],
@@ -1566,6 +1596,7 @@ def run_verification(job_id: str) -> None:
             ocr_provider=provider,
             vision_cache_path=cache_path,
             packet_name=job["packet_name"],
+            progress_callback=save_progress,
         )
         if not job.get("packet_name_user_supplied"):
             automatic_name = derive_packet_name(report, job["packet_name"])
@@ -1599,6 +1630,10 @@ def run_verification(job_id: str) -> None:
             workflow_status="Manual Review Pending",
             completed_at=utc_now(),
             message="Verification complete with OCR warnings" if warnings else "Verification complete",
+            progress_percent=100,
+            progress_stage="Verification complete",
+            processed_pages=len(report.pages),
+            total_pages=len(report.pages),
             summary=summary,
         )
         refresh_reviewed_output_files(final_job)
@@ -1615,6 +1650,7 @@ def run_verification(job_id: str) -> None:
             status="failed",
             completed_at=utc_now(),
             message=str(exc),
+            progress_stage="Verification failed",
             error_trace=traceback.format_exc(),
         )
         add_notification(
@@ -2340,6 +2376,10 @@ async def create_job(
         "assignee": "",
         "due_date": "",
         "message": "Queued for verification",
+        "progress_percent": 1,
+        "progress_stage": "Queued for verification",
+        "processed_pages": 0,
+        "total_pages": 0,
         "created_at": utc_now(),
         "updated_at": utc_now(),
         "summary": None,
@@ -2662,7 +2702,16 @@ async def rerun_job(background_tasks: BackgroundTasks, job_id: str) -> RedirectR
     if out_dir.exists():
         shutil.rmtree(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-    update_job(job_id, status="queued", message="Queued for re-run", summary=None)
+    update_job(
+        job_id,
+        status="queued",
+        message="Queued for re-run",
+        progress_percent=1,
+        progress_stage="Queued for re-run",
+        processed_pages=0,
+        total_pages=0,
+        summary=None,
+    )
     background_tasks.add_task(run_verification, job_id)
     return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
 
@@ -2731,6 +2780,10 @@ async def replace_page(
         input_path=str(new_input),
         status="queued",
         message=f"Page {page_no} replaced; queued for re-run",
+        progress_percent=1,
+        progress_stage="Queued after page replacement",
+        processed_pages=0,
+        total_pages=0,
         summary=None,
     )
     audit_event(
