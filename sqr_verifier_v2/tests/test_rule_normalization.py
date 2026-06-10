@@ -590,6 +590,108 @@ class RuleNormalizationTests(unittest.TestCase):
         ]
         self.assertEqual(failures, [])
 
+    def test_unassigned_packet_stamp_log_satisfies_current_subpackets(self):
+        current = PageRecord(
+            13, "", "Final Packed Product Sheet", "FPP",
+            {"wo": "11582", "customer": "Trader Joe's", "product": "Apricot Slabs"},
+        )
+        unassigned_stamp = PageRecord(21, "", "Stamp Log", "STAMP", {})
+        sp = SubPacket(
+            index=0, pages=[current], primary_wo="11582",
+            primary_customer="Trader Joe's", primary_product="Apricot Slabs",
+        )
+        run_subpacket_checks(
+            sp, self.config, self.config.find_customer("Trader Joe's"),
+            packet_pages=[current, unassigned_stamp],
+        )
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name == "Required form: Stamp Log"
+        ]
+        self.assertEqual(failures, [])
+
+    def test_stamp_log_for_related_wo_covers_same_customer_production_group(self):
+        current_wo_page = PageRecord(
+            13, "", "Final Packed Product Sheet", "FPP",
+            {"wo": "11582", "customer": "Trader Joe's", "product": "Apricot Slabs"},
+        )
+        related_wo_page = PageRecord(
+            14, "", "Final Packed Product Sheet", "FPP",
+            {"wo": "11583", "customer": "Trader Joe's", "product": "Choice Apricots"},
+        )
+        shared_stamp = PageRecord(
+            21, "", "Stamp Log", "STAMP",
+            {"wo": "11582", "customer": "Trader Joe's", "product": "Apricot Slabs"},
+        )
+        sp = SubPacket(
+            index=1, pages=[related_wo_page], primary_wo="11583",
+            primary_customer="Trader Joe's", primary_product="Choice Apricots",
+        )
+        run_subpacket_checks(
+            sp, self.config, self.config.find_customer("Trader Joe's"),
+            packet_pages=[current_wo_page, related_wo_page, shared_stamp],
+        )
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name == "Required form: Stamp Log"
+        ]
+        self.assertEqual(failures, [])
+
+    def test_conflicting_stamp_log_does_not_satisfy_required_form(self):
+        current = PageRecord(
+            13, "", "Final Packed Product Sheet", "FPP",
+            {"wo": "11582", "customer": "Current Customer", "product": "Apricot Slabs"},
+        )
+        conflicting_stamp = PageRecord(
+            21, "", "Stamp Log", "STAMP",
+            {"wo": "99999", "customer": "Other Customer", "product": "Raisins"},
+        )
+        sp = SubPacket(
+            index=0, pages=[current], primary_wo="11582",
+            primary_customer="Current Customer", primary_product="Apricot Slabs",
+        )
+        run_subpacket_checks(
+            sp, self.config, None,
+            packet_pages=[current, conflicting_stamp],
+        )
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name == "Required form: Stamp Log"
+        ]
+        self.assertEqual(len(failures), 1)
+
+    def test_multi_row_fpp_aggregate_is_not_compared_to_one_row_count(self):
+        fpp = PageRecord(
+            13,
+            "",
+            "Final Packed Product Sheet",
+            "FPP",
+            {
+                "wo": "11582",
+                "customer": "Trader Joe's",
+                "cases": 15,
+                "unit_lbs": 25,
+                "total_lbs": 12750,
+            },
+        )
+        sp = SubPacket(
+            index=0, pages=[fpp], primary_wo="11582",
+            primary_customer="Trader Joe's",
+        )
+        run_subpacket_checks(sp, self.config, None)
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name.startswith("Total weight calc")
+        ]
+        self.assertEqual(failures, [])
+        passed = [
+            check for check in sp.checks
+            if check.status == "pass" and check.name.startswith("Total weight calc")
+        ]
+        self.assertEqual(len(passed), 1)
+        self.assertIn("15 lines", passed[0].detail)
+        self.assertIn("34 bags", passed[0].detail)
+
     def test_weight_uses_supported_row_case_count_not_wrong_page_level_number(self):
         fpp = PageRecord(
             14, "", "Final Packed Product Sheet", "FPP",
