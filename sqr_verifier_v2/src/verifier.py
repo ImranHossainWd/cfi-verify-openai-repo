@@ -34,7 +34,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import yaml
 from PIL import Image, ImageDraw, ImageFont, ImageFile
@@ -2280,7 +2280,8 @@ def detect_markings(image_path: str) -> Dict[str, float]:
 
 
 def build_pages(image_paths: List[Path], txt_dir: Path, ocr: HybridOCR,
-                config: Config) -> List[PageRecord]:
+                config: Config,
+                page_progress: Optional[Callable[[int, int], None]] = None) -> List[PageRecord]:
     pages: List[PageRecord] = []
     txt_dir.mkdir(parents=True, exist_ok=True)
     for img in image_paths:
@@ -2347,6 +2348,8 @@ def build_pages(image_paths: List[Path], txt_dir: Path, ocr: HybridOCR,
                 rec.form_label = "Defect Bag Photo"
                 rec.form_code = "PHOTO"
         pages.append(rec)
+        if page_progress:
+            page_progress(len(pages), len(image_paths))
     return pages
 
 
@@ -2827,7 +2830,8 @@ def verify_pdf(pdf_path: str, out_dir: str,
                config_dir: Optional[str] = None,
                ocr_provider: str = "mock",
                vision_cache_path: Optional[str] = None,
-               packet_name: Optional[str] = None) -> PacketReport:
+               packet_name: Optional[str] = None,
+               progress_callback: Optional[Callable[[int, str, int, int], None]] = None) -> PacketReport:
     pdf_p = Path(pdf_path)
     out   = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     cfg_dir = Path(config_dir) if config_dir else Path(__file__).parent.parent / "config"
@@ -2837,9 +2841,15 @@ def verify_pdf(pdf_path: str, out_dir: str,
     work = out / "_work" / name
     work.mkdir(parents=True, exist_ok=True)
 
+    def progress(percent: int, message: str, processed: int = 0, total: int = 0) -> None:
+        if progress_callback:
+            progress_callback(percent, message, processed, total)
+
     # 1. Render
+    progress(7, "Rendering PDF pages")
     print(f"[{name}] Rendering PDF → images...")
     image_paths = render_pdf(pdf_p, work / "pages", dpi=150)
+    progress(12, f"Rendered {len(image_paths)} PDF pages", 0, len(image_paths))
     print(f"  {len(image_paths)} pages rendered.")
 
     # 2. OCR
@@ -2856,11 +2866,22 @@ def verify_pdf(pdf_path: str, out_dir: str,
         in {"1", "true", "yes", "on"},
     )
     ocr = HybridOCR(ocr_cfg)
-    pages = build_pages(image_paths, work / "txt", ocr, config)
+    def report_page_progress(done: int, total: int) -> None:
+        percent = 15 + int((done / max(total, 1)) * 60)
+        progress(percent, f"OCR page {done} of {total}", done, total)
+
+    pages = build_pages(
+        image_paths,
+        work / "txt",
+        ocr,
+        config,
+        page_progress=report_page_progress,
+    )
     n_vision = sum(1 for p in pages if p.ocr_backend_used == "vision")
     print(f"  Tesseract: {len(pages)-n_vision} pages, Vision OCR: {n_vision} pages.")
 
     # 3. Sub-packet split
+    progress(78, "Grouping pages into sub-packets", len(pages), len(pages))
     print(f"[{name}] Splitting into sub-packets...")
     sub_packets = split_into_sub_packets(pages)
     print(f"  {len(sub_packets)} sub-packet(s) detected.")
@@ -2900,6 +2921,7 @@ def verify_pdf(pdf_path: str, out_dir: str,
                 )
 
     # 5b. Per-sub-packet rules
+    progress(81, "Running packet verification rules", len(pages), len(pages))
     print(f"[{name}] Running rules per sub-packet...")
     for sp in sub_packets:
         determine_primary_values(sp)
@@ -2946,17 +2968,25 @@ def verify_pdf(pdf_path: str, out_dir: str,
                     "Required but not detected", []))
 
     # 6. Build outputs
+    progress(86, "Annotating verified packet pages", len(pages), len(pages))
     print(f"[{name}] Annotating pages...")
     page_checks: Dict[int, List[CheckResult]] = defaultdict(list)
     for c in report.all_checks:
         for pg in c.pages:
             page_checks[pg].append(c)
     annotated_dir = out / "annotated_pages"; annotated_dir.mkdir(exist_ok=True)
-    for rec in report.pages:
+    for index, rec in enumerate(report.pages, start=1):
         ann_path = annotated_dir / f"p-{rec.page_no:02d}_annot.png"
+        progress(
+            86 + int((index / max(len(report.pages), 1)) * 7),
+            f"Annotating page {index} of {len(report.pages)}",
+            index,
+            len(report.pages),
+        )
         if ann_path.exists() and ann_path.stat().st_size > 0:
             continue            # idempotent — already annotated
         annotate_page_image(rec, page_checks.get(rec.page_no, []), ann_path)
+    progress(94, "Generating summary and verified PDF", len(pages), len(pages))
     summary_p = out / f"{name}_summary.png"
     build_summary_image(report, summary_p)
     pdf_out = out / f"{name}_AI_VERIFIED.pdf"
@@ -2966,6 +2996,7 @@ def verify_pdf(pdf_path: str, out_dir: str,
     write_trace_json(report, out / f"{name}_trace.json")
     # Cross-reference matrix is produced as part of the cross_reference_matrix rule
     if config.rules.get("cross_reference_matrix", {}).get("enabled", True):
+        progress(97, "Building cross-reference matrix", len(pages), len(pages))
         matrix_path = out / f"{name}_cross_reference_matrix.xlsx"
         write_cross_reference_matrix(report, matrix_path)
         # Add a meta-check noting that the matrix exists (so it shows up in the
@@ -2975,6 +3006,7 @@ def verify_pdf(pdf_path: str, out_dir: str,
             "pass",
             f"Excel matrix written ({matrix_path.name}) — full field × page audit trail",
             []))
+    progress(99, "Finalizing verification results", len(pages), len(pages))
     print(f"[{name}] Done. Output: {pdf_out}")
     return report
 
