@@ -637,7 +637,7 @@ class RuleNormalizationTests(unittest.TestCase):
         ]
         self.assertEqual(failures, [])
 
-    def test_conflicting_stamp_log_does_not_satisfy_required_form(self):
+    def test_any_packet_stamp_log_satisfies_required_form(self):
         current = PageRecord(
             13, "", "Final Packed Product Sheet", "FPP",
             {"wo": "11582", "customer": "Current Customer", "product": "Apricot Slabs"},
@@ -658,7 +658,79 @@ class RuleNormalizationTests(unittest.TestCase):
             check for check in sp.checks
             if check.status == "fail" and check.name == "Required form: Stamp Log"
         ]
+        self.assertEqual(failures, [])
+
+    def test_stamp_log_still_fails_when_absent_everywhere(self):
+        current = PageRecord(
+            13, "", "Final Packed Product Sheet", "FPP",
+            {"wo": "11582", "customer": "Current Customer", "product": "Apricot Slabs"},
+        )
+        sp = SubPacket(
+            index=0, pages=[current], primary_wo="11582",
+            primary_customer="Current Customer", primary_product="Apricot Slabs",
+        )
+        run_subpacket_checks(sp, self.config, None, packet_pages=[current])
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail" and check.name == "Required form: Stamp Log"
+        ]
         self.assertEqual(len(failures), 1)
+
+    def test_copacker_vendor_po_is_not_compared_to_buyer_po(self):
+        vendor_po = PageRecord(
+            16, "", "Customer PO", "PO",
+            {
+                "wo": "11582",
+                "po": "P00001886",
+                "customer": "Garry Packing, Inc.",
+                "product": "Apricots",
+            },
+        )
+        sp = SubPacket(
+            index=0, pages=[vendor_po], primary_wo="11582",
+            primary_po="155596109", primary_customer="Trader Joe's",
+            primary_product="Apricots",
+        )
+        run_subpacket_checks(
+            sp, self.config, self.config.find_customer("Trader Joe's"),
+            packet_pages=[vendor_po],
+        )
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail"
+            and check.name.startswith("PO# on Customer PO")
+        ]
+        self.assertEqual(failures, [])
+
+    def test_copacker_vendor_po_passes_when_packet_profile_was_not_resolved(self):
+        buyer_page = PageRecord(
+            13, "", "Final Packed Product Sheet", "FPP",
+            {
+                "wo": "11582", "po": "155596109",
+                "customer": "Trader Joe's", "product": "Apricots",
+            },
+        )
+        vendor_po = PageRecord(
+            16, "", "Customer PO", "PO",
+            {
+                "wo": "11582", "po": "P00001886",
+                "customer": "Garry Packing, Inc.", "product": "Apricots",
+            },
+        )
+        sp = SubPacket(
+            index=0, pages=[buyer_page, vendor_po], primary_wo="11582",
+            primary_po="155596109", primary_customer="Trader Joe's",
+            primary_product="Apricots",
+        )
+        run_subpacket_checks(
+            sp, self.config, None, packet_pages=[buyer_page, vendor_po],
+        )
+        failures = [
+            check for check in sp.checks
+            if check.status == "fail"
+            and check.name.startswith("PO# on Customer PO")
+        ]
+        self.assertEqual(failures, [])
 
     def test_multi_row_fpp_aggregate_is_not_compared_to_one_row_count(self):
         fpp = PageRecord(
