@@ -1422,6 +1422,64 @@ def source_coa_supports_subpacket(page: PageRecord, sp: SubPacket,
     return bool(source_pages and product_match and is_source_or_support_page(page))
 
 
+def stamp_log_supports_subpacket(page: PageRecord, sp: SubPacket,
+                                 config: Config,
+                                 packet_pages: List[PageRecord]) -> bool:
+    """Associate packet-wide stamp logs with the related production group."""
+    if page.form_code != "STAMP":
+        return False
+    if page_supports_subpacket(page, sp, config):
+        return True
+
+    page_wos = page_wo_values(page)
+    page_customer = page.fields.get("customer")
+    page_product = page.fields.get("product")
+
+    # A same-customer stamp log is commonly shared across several related WOs
+    # and product variants within one production packet.
+    if (
+        page_customer
+        and sp.primary_customer
+        and customer_equivalent(page_customer, sp.primary_customer, config)
+    ):
+        return True
+
+    # If the log names another WO, follow that WO to a final-production page.
+    # It still supports this sub-packet when that page belongs to the same
+    # customer production group.
+    if page_wos and sp.primary_customer:
+        final_codes = {"SQR_CHK", "FPP", "PROD_REQ", "INV", "PO"}
+        for candidate in packet_pages:
+            candidate_customer = candidate.fields.get("customer")
+            if (
+                candidate.form_code in final_codes
+                and candidate_customer
+                and customer_equivalent(
+                    candidate_customer, sp.primary_customer, config
+                )
+                and any(
+                    page_has_relevant_wo(candidate, {stamp_wo})
+                    for stamp_wo in page_wos
+                )
+            ):
+                return True
+
+    if page_customer and sp.primary_customer:
+        return False
+    if (
+        page_product
+        and sp.primary_product
+        and not product_equivalent(page_product, sp.primary_product)
+    ):
+        return False
+    if page_wos and sp.primary_wo:
+        return False
+
+    # Stamp logs are often packet-wide sheets. If OCR found no conflicting
+    # identity, the log can support each current production sub-packet.
+    return True
+
+
 def source_only_subpacket(sp: SubPacket, customer_profile: Optional[CustomerProfile],
                           config: Config) -> bool:
     if not sp.pages:
@@ -1504,6 +1562,29 @@ def corrected_total_from_row(fields: Dict[str, Any], total_lbs: float,
         if inferred_case_count_supported(fields, inferred_cases):
             return corrected_total, int(round(inferred_cases))
     return None
+
+
+def is_multi_row_weight_sheet(page: PageRecord) -> bool:
+    if page.form_code != "FPP":
+        return False
+
+    def largest_list(value: Any) -> int:
+        if isinstance(value, list):
+            return max([len(value), *(largest_list(item) for item in value)], default=0)
+        if isinstance(value, dict):
+            return max((largest_list(item) for item in value.values()), default=0)
+        return 0
+
+    all_fields = page.fields.get("all_fields") or {}
+    keys = " ".join(str(key) for key in _flatten_dynamic_fields(all_fields)).lower()
+    return (
+        largest_list(all_fields) >= 2
+        or (
+            "quantity" in keys
+            and ("bag" in keys or "case" in keys)
+            and ("net" in keys or "gross" in keys or "total" in keys)
+        )
+    )
 
 
 def run_subpacket_checks(sp: SubPacket, config: Config,
@@ -1742,14 +1823,15 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                     page for page in all_packet_pages
                     if page.form_code == code and page_supports_subpacket(page, sp, config)
                 ]
-                if not shared_matches and code == "STAMP" and sp.primary_product:
-                    # Stamp logs are commonly shared across adjacent WOs in the
-                    # same product run. Product identity is sufficient here.
+                if not shared_matches and code == "STAMP":
+                    # Stamp logs are commonly packet-wide. Accept an unassigned
+                    # log only when it has no conflicting WO/customer/product.
                     shared_matches = [
                         page for page in all_packet_pages
                         if page.form_code == "STAMP"
-                        and normalize_company_name(page.fields.get("product", ""))
-                        == normalize_company_name(sp.primary_product)
+                        and stamp_log_supports_subpacket(
+                            page, sp, config, all_packet_pages
+                        )
                     ]
                 if not shared_matches and code == "COA":
                     shared_matches = [
@@ -2142,6 +2224,38 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                         f"Structured row supports {inferred_cases} cases/bags × "
                         f"{ulb} lb = {corrected_total} lb; extracted total {tot} lb "
                         f"has an OCR decimal-place shift.",
+                        [p.page_no], sub_packet=sp.index))
+                elif (
+                    (
+                        is_multi_row_weight_sheet(p)
+                        or (p.form_code == "FPP" and tot >= expected * 8)
+                    )
+                    and tot > expected * 1.15
+                    and comparison_unit_lbs > 0
+                    and abs((tot / comparison_unit_lbs) - round(tot / comparison_unit_lbs)) <= 0.01
+                ):
+                    aggregate_cases = int(round(tot / comparison_unit_lbs))
+                    bags_per_line = (
+                        aggregate_cases / cs if cs and cs > 0 else 0
+                    )
+                    formula = ""
+                    if (
+                        bags_per_line >= 2
+                        and abs(bags_per_line - round(bags_per_line)) <= 0.01
+                    ):
+                        formula = (
+                            f" The extracted {cs:g} is consistent with a line/bin "
+                            f"count: {cs:g} lines Ã— {int(round(bags_per_line))} "
+                            f"bags Ã— {ulb:g} lb = {tot:g} lb."
+                        )
+                    sp.checks.append(CheckResult(
+                        f"Total weight calc on {p.form_label} (p{p.page_no})",
+                        "pass",
+                        f"This is a multi-row packed-product sheet. The documented "
+                        f"{tot} lb represents an aggregate/subtotal of "
+                        f"{aggregate_cases} bags/cases at {ulb} lb; extracted count "
+                        f"{cs} is a row/bin value and is not compared to the aggregate."
+                        f"{formula}",
                         [p.page_no], sub_packet=sp.index))
                 else:
                     sp.checks.append(CheckResult(
