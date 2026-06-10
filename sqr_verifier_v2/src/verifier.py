@@ -1524,10 +1524,19 @@ def alternate_vendor_support_page(page: PageRecord, sp: SubPacket, config: Confi
     if page.form_code not in vendor_support_codes:
         return False
     effective_profile = customer_profile or config.find_customer(sp.primary_customer)
+    if not effective_profile:
+        for packet_page in packet_pages:
+            packet_customer = packet_page.fields.get("customer")
+            candidate_profile = config.find_customer(packet_customer) if packet_customer else None
+            if candidate_profile and candidate_profile.co_packer_route:
+                effective_profile = candidate_profile
+                break
     if effective_profile and effective_profile.co_packer_route:
         # Co-packer routes legitimately include supplier/vendor PO and label
         # paperwork under a different company name.
-        return True
+        return not customer_equivalent(
+            customer, effective_profile.canonical, config
+        )
     if sp.primary_wo and page_has_relevant_wo(page, {sp.primary_wo}):
         return False
     matching_vendor_pages = [
@@ -1703,11 +1712,16 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                             f"PO# not detected on this page (please confirm visually)",
                             [p.page_no], sub_packet=sp.index))
                         continue
-                    if is_source_or_support_page(p):
+                    if (
+                        is_source_or_support_page(p)
+                        or alternate_vendor_support_page(
+                            p, sp, config, all_packet_pages, customer_profile
+                        )
+                    ):
                         sp.checks.append(CheckResult(
                             f"PO# on {p.form_label} (p{p.page_no})",
                             "pass",
-                            f"PO# {ppo} belongs to source/support documentation and "
+                            f"PO# {ppo} belongs to source/vendor support documentation and "
                             f"is not compared to final-order PO {sp.primary_po}.",
                             [p.page_no], sub_packet=sp.index))
                         continue
@@ -1809,6 +1823,30 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
         for code, name in REQUIRED_FORMS_FOR_ANY_PACKET.items():
             if code not in PER_SUB_PACKET_FORMS:
                 continue
+            if code == "STAMP":
+                if support_only:
+                    sp.checks.append(CheckResult(
+                        f"Required form: {name}", "pass",
+                        "Source/vendor-support sub-packet; Stamp Log is not required.",
+                        [], sub_packet=sp.index))
+                else:
+                    packet_stamp_pages = [
+                        page for page in all_packet_pages
+                        if page.form_code == "STAMP"
+                    ]
+                    if packet_stamp_pages:
+                        sp.checks.append(CheckResult(
+                            f"Required form: {name}", "pass",
+                            f"Packet-level Stamp Log found on pages "
+                            f"{[page.page_no for page in packet_stamp_pages]}.",
+                            [page.page_no for page in packet_stamp_pages],
+                            sub_packet=sp.index))
+                    else:
+                        sp.checks.append(CheckResult(
+                            f"Required form: {name}", "fail",
+                            "No Stamp Log detected anywhere in packet.",
+                            [], sub_packet=sp.index))
+                continue
             if code in has:
                 sp.checks.append(CheckResult(
                     f"Required form: {name}", "pass",
@@ -1823,16 +1861,6 @@ def run_subpacket_checks(sp: SubPacket, config: Config,
                     page for page in all_packet_pages
                     if page.form_code == code and page_supports_subpacket(page, sp, config)
                 ]
-                if not shared_matches and code == "STAMP":
-                    # Stamp logs are commonly packet-wide. Accept an unassigned
-                    # log only when it has no conflicting WO/customer/product.
-                    shared_matches = [
-                        page for page in all_packet_pages
-                        if page.form_code == "STAMP"
-                        and stamp_log_supports_subpacket(
-                            page, sp, config, all_packet_pages
-                        )
-                    ]
                 if not shared_matches and code == "COA":
                     shared_matches = [
                         page for page in all_packet_pages
