@@ -51,39 +51,8 @@
         <div><strong>{{ job.summary.fail_count }}</strong><small>Flags</small></div>
       </div>
 
-      <h3>Sub-packets</h3>
-      <div class="subpackets">
-      {% for sp in job.summary.sub_packets %}
-        <div class="subpacket">
-          <strong>#{{ sp.index }} &middot; WO {{ sp.wo or "unknown" }}</strong>
-          <span>{{ sp.customer or "Unknown customer" }} &middot; {{ sp.product or "Unknown product" }}</span>
-          <small>PO {{ sp.po or "unknown" }} &middot; {{ sp.cases or "?" }} cases &middot; {{ sp.total_lbs or "?" }} lbs</small>
-        </div>
-      {% endfor %}
-      </div>
-
-      {% if pages %}
-        <div class="bookmarks-head">
-          <h3>Packet pages</h3>
-          <button type="button" class="secondary small" id="bookmarkToggle" aria-expanded="false">Bookmarks ({{ pages|length }})</button>
-        </div>
-        <div class="page-directory bookmark-directory" id="bookmarkDirectory" hidden>
-        {% for page in pages %}
-          <button
-            type="button"
-            class="page-directory__item"
-            data-page-open="{{ page.page_no }}"
-            data-page-label="{{ page.label }}"
-          >
-            <strong>Page {{ page.page_no }}</strong>
-            <span>{{ page.label }}</span>
-          </button>
-        {% endfor %}
-        </div>
-      {% endif %}
-
+      <h3 id="review-queue">Review queue</h3>
       {% if job.summary.issues %}
-        <h3 id="review-queue">Review queue</h3>
         <div class="issue-list">
         {% for issue in job.summary.issues %}
           <article class="issue-card {{ issue.check_status }}">
@@ -128,6 +97,37 @@
         </div>
       {% else %}
         <p class="empty">No flags found.</p>
+      {% endif %}
+
+      <h3>Sub-packets</h3>
+      <div class="subpackets">
+      {% for sp in job.summary.sub_packets %}
+        <div class="subpacket">
+          <strong>#{{ sp.index }} &middot; WO {{ sp.wo or "unknown" }}</strong>
+          <span>{{ sp.customer or "Unknown customer" }} &middot; {{ sp.product or "Unknown product" }}</span>
+          <small>PO {{ sp.po or "unknown" }} &middot; {{ sp.cases or "?" }} cases &middot; {{ sp.total_lbs or "?" }} lbs</small>
+        </div>
+      {% endfor %}
+      </div>
+
+      {% if pages %}
+        <div class="bookmarks-head">
+          <h3>Bookmark pages</h3>
+          <button type="button" class="secondary small" id="bookmarkToggle" aria-expanded="false">Bookmarks ({{ pages|length }})</button>
+        </div>
+        <div class="page-directory bookmark-directory" id="bookmarkDirectory" hidden>
+        {% for page in pages %}
+          <button
+            type="button"
+            class="page-directory__item"
+            data-page-open="{{ page.page_no }}"
+            data-page-label="{{ page.label }}"
+          >
+            <strong>Page {{ page.page_no }}</strong>
+            <span>{{ page.label }}</span>
+          </button>
+        {% endfor %}
+        </div>
       {% endif %}
 
     {% else %}
