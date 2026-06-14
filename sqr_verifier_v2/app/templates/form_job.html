@@ -20,15 +20,22 @@
       <div><strong>{{ job.result.pass_count }}</strong><small>Pass</small></div>
       <div><strong>{{ job.result.fail_count }}</strong><small>Flags</small></div>
     </div>
-    <div class="issue-list">
-      {% for check in job.result.checks %}
-      <article class="issue-card {{ check.status }}">
-        <strong>{{ check.name }}</strong>
-        <span>{{ check.detail }}</span>
-        {% if check.pages %}<small>Pages: {{ check.pages|join(", ") }}</small>{% endif %}
-      </article>
-      {% endfor %}
-    </div>
+    <h3>Review queue</h3>
+    {% if job.result.fail_count %}
+      <div class="issue-list">
+        {% for check in job.result.checks %}
+          {% if check.status == "fail" %}
+          <article class="issue-card fail">
+            <strong>{{ check.name }}</strong>
+            <span>{{ check.detail }}</span>
+            {% if check.pages %}<small>Pages: {{ check.pages|join(", ") }}</small>{% endif %}
+          </article>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">No flags found. All {{ job.result.pass_count }} verification checks passed.</p>
+    {% endif %}
     <h3>Form pages</h3>
     <div class="page-directory">
       {% for page_no in range(1, page_count + 1) %}
@@ -44,6 +51,9 @@
   </article>
   <aside class="panel">
     <a class="secondary-link" href="/forms/{{ job.id }}/file" target="_blank">Open scanned PDF</a>
+    <form action="/forms/{{ job.id }}/rerun" method="post">
+      <button type="submit" class="secondary">Re-run form</button>
+    </form>
     {% if request.state.user.role == "Admin" %}
     <form action="/forms/{{ job.id }}/delete" method="post" onsubmit="return confirm('Permanently delete this form and all generated results?');">
       <button type="submit" class="danger-button">Delete form</button>
