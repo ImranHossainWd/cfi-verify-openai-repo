@@ -44,6 +44,11 @@
   </article>
   <aside class="panel">
     <a class="secondary-link" href="/forms/{{ job.id }}/file" target="_blank">Open scanned PDF</a>
+    {% if request.state.user.role == "Admin" %}
+    <form action="/forms/{{ job.id }}/delete" method="post" onsubmit="return confirm('Permanently delete this form and all generated results?');">
+      <button type="submit" class="danger-button">Delete form</button>
+    </form>
+    {% endif %}
     <h3>Review workflow</h3>
     <form action="/forms/{{ job.id }}/workflow" method="post" class="mobile-form">
       <label>Status
