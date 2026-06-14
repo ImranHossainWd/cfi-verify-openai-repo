@@ -143,6 +143,11 @@ DEFAULT_FOOD_SAFETY_TEMPLATES = {
         "required_signatures": 1,
         "frequency": "Daily",
         "rule_family": "lubrication",
+        "rule_config": {
+            "equipment_columns": [
+                "sorting_line_1", "sorting_line_2", "dicer", "processor", "tumbler"
+            ]
+        },
         "related_templates": ["EQUIPMENT_WASHDOWN", "PREOP_INSPECTION"],
     },
     "DICER_BLADES": {
@@ -1478,32 +1483,71 @@ def extract_structured_form_observations(
     from ocr_backend import OpenAIVisionBackend
     import fitz
 
-    prompt = f"""
-Read this California Fruit compliance form.
-Form: {template.get('label')}
-Rule family: {rule_family}
-
-Extract only visibly written or marked entries. Never invent missing values.
+    if rule_family == "lubrication":
+        schema = """
 Return valid JSON only:
-{{
+{
+  "form_date": "",
+  "entries": [
+    {
+      "date": "",
+      "initials": "",
+      "start_time": "",
+      "end_time": "",
+      "statuses": {
+        "sorting_line_1": "",
+        "sorting_line_2": "",
+        "dicer": "",
+        "processor": "",
+        "tumbler": ""
+      },
+      "grinder_greased": "",
+      "grinder_initials": "",
+      "verified_by": ""
+    }
+  ]
+}
+Important:
+- C, LUB, INSP, and N/A are STATUS VALUES written inside equipment columns.
+- C means Chains. LUB means Lubricated. INSP means Inspection only/used.
+  N/A means not used.
+- Never return "C = Chains" or the printed legend as an equipment name.
+- Return only rows containing handwriting. Omit completely blank calendar rows.
+- Preserve each handwritten status in its correct equipment column.
+""".strip()
+    else:
+        schema = """
+Return valid JSON only:
+{
   "form_date": "", "verified_by": "", "month": "", "chemical": "",
-  "rows": [{{
+  "rows": [{
     "equipment": "", "name": "", "date": "", "initials": "",
     "status": "", "result": "", "used": false,
     "wash": "", "sanitation": "", "weekly_sanitation_due": false,
     "value": "", "reading": "", "minimum": "", "maximum": "",
     "instrument": "", "corrective_action": "", "blade_count": "",
     "sanitizer_used": ""
-  }}],
+  }],
   "inspections": [],
   "equipment_used": null, "corrective_action": "", "blade_count": "",
   "idle_over_month": false, "repaired": false, "cleaned_before_use": false
-}}
+}
 For grid forms, create one row for each dated or equipment entry. Preserve P/F/I,
 LUB, INSP, N/A, initials, times, and numeric readings exactly as written.
 """.strip()
+    prompt = f"""
+Read this California Fruit compliance form.
+Form: {template.get('label')}
+Rule family: {rule_family}
+
+Extract only visibly written or marked entries. Never invent missing values.
+Do not return printed headings, legends, example values, empty calendar rows, or
+empty table rows as completed entries. A row must contain visible handwriting,
+a checkmark, initials, a date, a reading, or another entered mark to be returned.
+{schema}
+""".strip()
     backend = OpenAIVisionBackend()
-    combined: Dict[str, Any] = {"rows": [], "inspections": [], "pages": []}
+    combined: Dict[str, Any] = {"rows": [], "entries": [], "inspections": [], "pages": []}
     image_dir = output_dir / "vision"
     image_dir.mkdir(parents=True, exist_ok=True)
     with fitz.open(str(pdf_path)) as doc:
@@ -1517,6 +1561,7 @@ LUB, INSP, N/A, initials, times, and numeric readings exactly as written.
                 continue
             combined["pages"].append(data)
             combined["rows"].extend(data.get("rows") or [])
+            combined["entries"].extend(data.get("entries") or [])
             combined["inspections"].extend(data.get("inspections") or [])
             for key in (
                 "form_date", "verified_by", "month", "chemical", "equipment_used", "corrective_action",
@@ -1720,6 +1765,20 @@ def run_form_verification(form_job_id: str) -> None:
                 "detail": f"Read {len(combined)} characters across {len(pages)} page(s)",
                 "pages": list(range(1, len(pages) + 1)),
             })
+        unique_checks: List[Dict[str, Any]] = []
+        seen_checks = set()
+        for item in checks:
+            signature = (
+                item.get("name"),
+                item.get("status"),
+                item.get("detail"),
+                tuple(item.get("pages") or []),
+            )
+            if signature in seen_checks:
+                continue
+            seen_checks.add(signature)
+            unique_checks.append(item)
+        checks = unique_checks
         failures = [item for item in checks if item["status"] == "fail"]
         result = {
             "overall": "FAIL" if failures else "PASS",
@@ -2423,6 +2482,31 @@ async def food_safety_form_file(form_job_id: str) -> FileResponse:
     if FORM_UPLOAD_DIR.resolve() not in path.parents or not path.exists():
         raise HTTPException(status_code=404, detail="Form file not found")
     return FileResponse(path, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{path.name}"'})
+
+
+@app.post("/forms/{form_job_id}/delete")
+async def delete_food_safety_form(request: Request, form_job_id: str) -> RedirectResponse:
+    job = get_form_job(form_job_id)
+    upload_root = FORM_UPLOAD_DIR.resolve()
+    output_root = FORM_OUTPUT_DIR.resolve()
+    input_path = Path(job["input_path"]).resolve()
+    output_path = Path(job["output_dir"]).resolve()
+    if upload_root not in input_path.parents or output_root not in output_path.parents:
+        raise HTTPException(status_code=400, detail="Form paths are outside the managed data directory.")
+    if input_path.exists():
+        input_path.unlink()
+    if output_path.exists():
+        shutil.rmtree(output_path)
+    jobs = load_form_jobs()
+    jobs.pop(form_job_id, None)
+    save_form_jobs(jobs)
+    add_notification(
+        "Compliance form deleted",
+        f"{job.get('name')} was deleted by {actor_from_request(request)}.",
+        recipient="admin",
+        kind="warning",
+    )
+    return RedirectResponse(url="/forms", status_code=303)
 
 
 @app.get("/forms/{form_job_id}/page/{page_no}.png")
