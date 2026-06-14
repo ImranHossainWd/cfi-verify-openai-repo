@@ -46,7 +46,7 @@ from form_rules import validate_structured_form  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-06-14-form-verifier-editor-v1"
+APP_VERSION = "2026-06-14-form-review-queue-v2"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
@@ -2507,6 +2507,34 @@ async def delete_food_safety_form(request: Request, form_job_id: str) -> Redirec
         kind="warning",
     )
     return RedirectResponse(url="/forms", status_code=303)
+
+
+@app.post("/forms/{form_job_id}/rerun")
+async def rerun_food_safety_form(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    form_job_id: str,
+) -> RedirectResponse:
+    job = get_form_job(form_job_id)
+    output_dir = Path(job["output_dir"])
+    clear_generated_outputs(output_dir)
+    history = list(job.get("history") or [])
+    history.append({
+        "at": utc_now(),
+        "user": actor_from_request(request),
+        "status": "Re-run requested",
+        "comment": "The current form revision was queued for verification again.",
+    })
+    update_form_job(
+        form_job_id,
+        status="queued",
+        workflow_status="Awaiting Verification",
+        message="Queued for form re-run",
+        result=None,
+        history=history[-100:],
+    )
+    background_tasks.add_task(run_form_verification, form_job_id)
+    return RedirectResponse(url=f"/forms/{form_job_id}", status_code=303)
 
 
 @app.get("/forms/{form_job_id}/page/{page_no}.png")
