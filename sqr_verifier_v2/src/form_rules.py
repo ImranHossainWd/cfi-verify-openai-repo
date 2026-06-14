@@ -29,6 +29,8 @@ def normalize_mark(value: str) -> str:
         return "not_used"
     if clean in {"lub", "lubricated", "lubrication"}:
         return "lubricated"
+    if clean in {"c", "chain", "chains"}:
+        return "chains"
     return clean
 
 
@@ -58,6 +60,50 @@ def _check(name: str, status: str, detail: str, pages: Optional[List[int]] = Non
     return {"name": name, "status": status, "detail": detail, "pages": pages or []}
 
 
+PRINTED_PLACEHOLDERS = {
+    "date", "initials", "time", "start time", "end time", "equipment",
+    "name", "status", "result", "pass", "fail", "verified by",
+    "comments", "findings", "not used", "inspection only",
+}
+
+
+def _meaningful(value: Any) -> bool:
+    if value in (None, "", [], {}):
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, dict):
+        return any(_meaningful(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_meaningful(item) for item in value)
+    clean = re.sub(r"\s+", " ", str(value).strip().lower())
+    return bool(clean) and clean not in PRINTED_PLACEHOLDERS
+
+
+def row_has_user_entry(row: Dict[str, Any]) -> bool:
+    """True only when a row contains entered data, not printed labels/legends."""
+    return any(_meaningful(value) for key, value in row.items() if key not in {
+        "equipment", "name", "instrument", "label", "row_label", "column",
+    })
+
+
+def _dedupe_checks(checks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    unique: List[Dict[str, Any]] = []
+    seen = set()
+    for item in checks:
+        signature = (
+            item.get("name"),
+            item.get("status"),
+            item.get("detail"),
+            tuple(item.get("pages") or []),
+        )
+        if signature in seen:
+            continue
+        seen.add(signature)
+        unique.append(item)
+    return unique
+
+
 def validate_structured_form(
     rule_family: str,
     observations: Dict[str, Any],
@@ -77,6 +123,8 @@ def validate_structured_form(
 
     if family == "equipment_washdown":
         for row in rows:
+            if not row_has_user_entry(row):
+                continue
             equipment = equipment_key(str(row.get("equipment") or row.get("name") or "Equipment"))
             used = bool(row.get("used"))
             wash = normalize_mark(str(row.get("wash") or row.get("daily_wash") or ""))
@@ -100,6 +148,8 @@ def validate_structured_form(
             for row in peer.get("observations", {}).get("rows", []):
                 usage[equipment_key(str(row.get("equipment") or row.get("name") or ""))] = bool(row.get("used"))
         for row in rows:
+            if not row_has_user_entry(row):
+                continue
             equipment = equipment_key(str(row.get("equipment") or row.get("name") or "Equipment"))
             status = normalize_mark(str(row.get("status") or row.get("result") or ""))
             used = usage.get(equipment)
@@ -115,22 +165,61 @@ def validate_structured_form(
             checks.append(_check(f"Pre-op status: {equipment}", "pass" if ok else "fail", detail))
 
     elif family == "lubrication":
-        for row in rows:
-            equipment = equipment_key(str(row.get("equipment") or row.get("name") or "Equipment"))
-            status = normalize_mark(str(row.get("status") or row.get("result") or ""))
-            ok = status in {"lubricated", "inspected", "not_used", "pass"}
-            checks.append(_check(
-                f"Lubrication status: {equipment}",
-                "pass" if ok else "fail",
-                "A valid LUB/INSP/N/A status is recorded." if ok else "Lubrication status is blank or unsupported.",
-            ))
+        valid_statuses = {"chains", "lubricated", "inspected", "not_used", "pass"}
+        expected_equipment = config.get("equipment_columns") or [
+            "sorting_line_1", "sorting_line_2", "dicer", "processor", "tumbler"
+        ]
+        entries = observations.get("entries") or []
+        if entries:
+            for row in entries:
+                statuses = row.get("statuses") or row.get("equipment_statuses") or {}
+                active = row_has_user_entry(row)
+                if not active:
+                    continue
+                date = str(row.get("date") or "Undated row").strip()
+                invalid: List[str] = []
+                for equipment in expected_equipment:
+                    status = normalize_mark(str(statuses.get(equipment) or ""))
+                    if status not in valid_statuses:
+                        invalid.append(equipment.replace("_", " "))
+                checks.append(_check(
+                    f"Lubrication row: {date}",
+                    "pass" if not invalid else "fail",
+                    (
+                        "All equipment columns contain C, LUB, INSP, or N/A."
+                        if not invalid
+                        else f"Missing or unsupported status for: {', '.join(invalid)}."
+                    ),
+                ))
+        else:
+            # Backward-compatible handling for older generic vision output.
+            for row in rows:
+                if not row_has_user_entry(row):
+                    continue
+                equipment_raw = str(row.get("equipment") or row.get("name") or "").strip()
+                status = normalize_mark(str(row.get("status") or row.get("result") or ""))
+                date = str(row.get("date") or "").strip()
+                if not status and not date:
+                    continue
+                equipment = equipment_key(equipment_raw or "Equipment")
+                ok = status in valid_statuses
+                checks.append(_check(
+                    f"Lubrication status: {equipment}",
+                    "pass" if ok else "fail",
+                    "A valid C/LUB/INSP/N/A status is recorded."
+                    if ok else "Lubrication status is blank or unsupported.",
+                ))
 
     elif family == "dicer_blades":
         used = bool(observations.get("equipment_used", True))
         inspections = observations.get("inspections") or rows
         if used:
             required = int(config.get("required_inspections", 4) or 4)
-            completed = [item for item in inspections if normalize_mark(str(item.get("result") or item.get("status") or ""))]
+            completed = [
+                item for item in inspections
+                if normalize_mark(str(item.get("result") or item.get("status") or ""))
+                and row_has_user_entry(item)
+            ]
             checks.append(_check(
                 "Dicer inspection frequency",
                 "pass" if len(completed) >= required else "fail",
@@ -149,6 +238,8 @@ def validate_structured_form(
 
     elif family == "calibration":
         for row in rows:
+            if not row_has_user_entry(row):
+                continue
             instrument = str(row.get("instrument") or row.get("name") or "Instrument")
             result = value_in_tolerance(
                 row.get("value") or row.get("reading"),
@@ -164,6 +255,8 @@ def validate_structured_form(
 
     elif family == "backpack_sanitizer":
         for row in rows:
+            if not row_has_user_entry(row):
+                continue
             date = str(row.get("date") or "").strip()
             initials = str(row.get("initials") or "").strip()
             sanitizer_used = normalize_mark(str(row.get("sanitizer_used") or row.get("status") or ""))
@@ -193,4 +286,4 @@ def validate_structured_form(
                 else "Equipment idle over one month or repaired must be cleaned before use.",
             ))
 
-    return checks
+    return _dedupe_checks(checks)
