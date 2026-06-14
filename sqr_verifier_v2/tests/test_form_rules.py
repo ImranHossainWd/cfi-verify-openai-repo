@@ -38,6 +38,55 @@ class DailyMonthlyFormRuleTests(unittest.TestCase):
         }, related=related)
         self.assertTrue(all(item["status"] == "pass" for item in checks))
 
+    def test_lubrication_grid_uses_status_codes_not_legend_as_equipment(self):
+        checks = validate_structured_form("lubrication", {
+            "entries": [{
+                "date": "1/5/2026",
+                "initials": "JR",
+                "statuses": {
+                    "sorting_line_1": "LUB",
+                    "sorting_line_2": "INSP",
+                    "dicer": "C",
+                    "processor": "N/A",
+                    "tumbler": "INSP",
+                },
+                "verified_by": "AA",
+            }],
+            "rows": [{"equipment": "C = Chains", "status": ""}],
+        })
+        self.assertEqual(len(checks), 1)
+        self.assertEqual(checks[0]["status"], "pass")
+
+    def test_lubrication_ignores_blank_calendar_and_legend_rows(self):
+        checks = validate_structured_form("lubrication", {
+            "rows": [
+                {"equipment": "C = Chains", "status": "", "date": ""},
+                {"equipment": "", "status": "", "date": ""},
+            ],
+        })
+        self.assertEqual(checks, [])
+
+    def test_all_form_families_ignore_blank_template_rows(self):
+        blank_rows = {"rows": [
+            {"equipment": "Equipment", "status": "Status", "date": "Date"},
+            {"instrument": "Instrument", "value": "", "minimum": "", "maximum": ""},
+            {"date": "", "initials": "", "result": ""},
+        ]}
+        self.assertEqual(validate_structured_form("equipment_washdown", blank_rows), [])
+        self.assertEqual(validate_structured_form("preop", blank_rows), [])
+        self.assertEqual(validate_structured_form("calibration", blank_rows), [])
+        self.assertEqual(validate_structured_form("backpack_sanitizer", blank_rows), [])
+
+    def test_dicer_ignores_printed_blank_inspection_rows(self):
+        checks = validate_structured_form("dicer_blades", {
+            "equipment_used": False,
+            "inspections": [
+                {"status": "Result", "date": "Date"},
+                {"status": "", "date": ""},
+            ],
+        })
+        self.assertEqual(checks, [])
+
     def test_failed_dicer_inspection_needs_action_and_count(self):
         checks = validate_structured_form("dicer_blades", {
             "equipment_used": True,
