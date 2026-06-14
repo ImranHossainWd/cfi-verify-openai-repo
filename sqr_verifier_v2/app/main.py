@@ -42,10 +42,11 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from verifier import verify_pdf  # noqa: E402
+from form_rules import validate_structured_form  # noqa: E402
 
 
 APP_NAME = "California Fruit OpenAI Sorting Quality Verifier"
-APP_VERSION = "2026-06-12-review-queue-layout-v1"
+APP_VERSION = "2026-06-14-form-verifier-editor-v1"
 PREVIEW_MAX_ROWS = int(os.environ.get("PREVIEW_MAX_ROWS", "250"))
 PREVIEW_MAX_COLS = int(os.environ.get("PREVIEW_MAX_COLS", "60"))
 DATA_DIR = Path(os.environ.get("SQR_DATA_DIR", ROOT / "web_data")).resolve()
@@ -116,6 +117,69 @@ DEFAULT_FOOD_SAFETY_TEMPLATES = {
         "required_terms": ["First Aid"],
         "require_date": True,
         "required_signatures": 1,
+    },
+    "EQUIPMENT_WASHDOWN": {
+        "label": "Daily Equipment Wash Down / Sanitation",
+        "required_terms": ["Equipment", "Wash"],
+        "require_date": True,
+        "required_signatures": 1,
+        "frequency": "Daily",
+        "rule_family": "equipment_washdown",
+        "related_templates": ["PREOP_INSPECTION", "LUBRICATION_LOG"],
+    },
+    "PREOP_INSPECTION": {
+        "label": "Daily Start Up / Pre-Op Inspection Log",
+        "required_terms": ["Inspection"],
+        "require_date": True,
+        "required_signatures": 1,
+        "frequency": "Daily",
+        "rule_family": "preop",
+        "related_templates": ["EQUIPMENT_WASHDOWN"],
+    },
+    "LUBRICATION_LOG": {
+        "label": "Lubrication Log",
+        "required_terms": ["Lubrication"],
+        "require_date": True,
+        "required_signatures": 1,
+        "frequency": "Daily",
+        "rule_family": "lubrication",
+        "related_templates": ["EQUIPMENT_WASHDOWN", "PREOP_INSPECTION"],
+    },
+    "DICER_BLADES": {
+        "label": "Dicer Blades Inspection",
+        "required_terms": ["Blades Inspection", "Dicer"],
+        "require_date": True,
+        "required_signatures": 1,
+        "frequency": "Daily",
+        "rule_family": "dicer_blades",
+        "rule_config": {"required_inspections": 4},
+        "related_templates": ["PREOP_INSPECTION"],
+    },
+    "CALIBRATION_LOG": {
+        "label": "Calibration Log",
+        "required_terms": ["Calibration"],
+        "require_date": True,
+        "required_signatures": 1,
+        "frequency": "Daily",
+        "rule_family": "calibration",
+        "related_templates": [],
+    },
+    "BACKPACK_SANITIZER": {
+        "label": "Backpack Sanitizer Log",
+        "required_terms": ["Backpack Sanitizer"],
+        "require_date": True,
+        "required_signatures": 1,
+        "frequency": "Monthly",
+        "rule_family": "backpack_sanitizer",
+        "rule_config": {
+            "chemical_schedule": {
+                "january": "PAA", "february": "QT185", "march": "PAA",
+                "april": "QT185", "may": "PAA", "june": "QT185",
+                "july": "PAA", "august": "QT185", "september": "PAA",
+                "october": "QT185", "november": "PAA", "december": "QT185",
+            }
+        },
+        "related_templates": [],
     },
 }
 
@@ -629,6 +693,8 @@ def get_form_templates() -> Dict[str, Dict[str, Any]]:
             "frequency": custom.get(code, {}).get("frequency", "As needed"),
             "tracking_enabled": custom.get(code, {}).get("tracking_enabled", False),
             "related_templates": custom.get(code, {}).get("related_templates", []),
+            "rule_family": custom.get(code, {}).get("rule_family", ""),
+            "rule_config": custom.get(code, {}).get("rule_config", {}),
         }
     for code, item in custom.items():
         templates.setdefault(
@@ -647,6 +713,8 @@ def get_form_templates() -> Dict[str, Dict[str, Any]]:
                 "frequency": item.get("frequency", "As needed"),
                 "tracking_enabled": item.get("tracking_enabled", False),
                 "related_templates": item.get("related_templates", []),
+                "rule_family": item.get("rule_family", ""),
+                "rule_config": item.get("rule_config", {}),
             },
         )
     for code, defaults in DEFAULT_FOOD_SAFETY_TEMPLATES.items():
@@ -661,9 +729,11 @@ def get_form_templates() -> Dict[str, Dict[str, Any]]:
             "required_signatures": defaults["required_signatures"],
             "regions": [],
             "sample_filename": "",
-            "frequency": "Daily" if code == "FORKLIFT_DAILY" else "Monthly",
+            "frequency": defaults.get("frequency", "Daily" if code == "FORKLIFT_DAILY" else "Monthly"),
             "tracking_enabled": True,
-            "related_templates": [],
+            "related_templates": defaults.get("related_templates", []),
+            "rule_family": defaults.get("rule_family", ""),
+            "rule_config": defaults.get("rule_config", {}),
         })
     return dict(sorted(templates.items()))
 
@@ -686,6 +756,8 @@ def save_form_template(
     frequency: str = "As needed",
     tracking_enabled: bool = False,
     related_templates_text: str = "",
+    rule_family: str = "",
+    rule_config_text: str = "{}",
 ) -> str:
     clean_code = re.sub(r"[^A-Za-z0-9_]+", "_", code.strip().upper()).strip("_")
     if not clean_code:
@@ -700,6 +772,12 @@ def save_form_template(
             raise ValueError
     except (json.JSONDecodeError, ValueError):
         raise HTTPException(status_code=400, detail="Visual regions must be a JSON list.")
+    try:
+        rule_config = json.loads(rule_config_text or "{}")
+        if not isinstance(rule_config, dict):
+            raise ValueError
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="Rule configuration must be a JSON object.")
     templates = get_form_templates()
     previous = templates.get(clean_code, {})
     templates[clean_code] = {
@@ -720,6 +798,8 @@ def save_form_template(
             for item in re.split(r"[,\n]+", related_templates_text)
             if item.strip()
         ],
+        "rule_family": re.sub(r"[^a-z0-9_]+", "_", rule_family.strip().lower()).strip("_"),
+        "rule_config": rule_config,
     }
     save_json_file(TEMPLATES_FILE, templates)
     data = rules_config()
@@ -1016,6 +1096,14 @@ def page_catalog(job: Dict[str, Any]) -> List[Dict[str, Any]]:
             or page.get("form_code")
             or "Unidentified form"
         )
+        fields = page.get("fields") or {}
+        product = str(fields.get("product") or "").strip()
+        if (page.get("form_code") or "") == "COA" and product:
+            label = f"COA - {product}"
+        elif (page.get("form_code") or "") == "SQR_FULL":
+            field_text = json.dumps(fields, ensure_ascii=True).lower()
+            if any(term in field_text for term in ("cover sheet", "cold storage", "bin pull", "pull ticket")):
+                label = "Sorting Quality Report - Bin Pull Cover"
         label_counts[label] = label_counts.get(label, 0) + 1
         pages.append({
             "page_no": page_no,
@@ -1379,6 +1467,116 @@ def extract_form_pdf_text(pdf_path: Path, output_dir: Path) -> List[str]:
     return texts
 
 
+def extract_structured_form_observations(
+    pdf_path: Path,
+    output_dir: Path,
+    template: Dict[str, Any],
+) -> Dict[str, Any]:
+    rule_family = str(template.get("rule_family") or "").strip()
+    if not rule_family or not os.environ.get("OPENAI_API_KEY"):
+        return {}
+    from ocr_backend import OpenAIVisionBackend
+    import fitz
+
+    prompt = f"""
+Read this California Fruit compliance form.
+Form: {template.get('label')}
+Rule family: {rule_family}
+
+Extract only visibly written or marked entries. Never invent missing values.
+Return valid JSON only:
+{{
+  "form_date": "", "verified_by": "", "month": "", "chemical": "",
+  "rows": [{{
+    "equipment": "", "name": "", "date": "", "initials": "",
+    "status": "", "result": "", "used": false,
+    "wash": "", "sanitation": "", "weekly_sanitation_due": false,
+    "value": "", "reading": "", "minimum": "", "maximum": "",
+    "instrument": "", "corrective_action": "", "blade_count": "",
+    "sanitizer_used": ""
+  }}],
+  "inspections": [],
+  "equipment_used": null, "corrective_action": "", "blade_count": "",
+  "idle_over_month": false, "repaired": false, "cleaned_before_use": false
+}}
+For grid forms, create one row for each dated or equipment entry. Preserve P/F/I,
+LUB, INSP, N/A, initials, times, and numeric readings exactly as written.
+""".strip()
+    backend = OpenAIVisionBackend()
+    combined: Dict[str, Any] = {"rows": [], "inspections": [], "pages": []}
+    image_dir = output_dir / "vision"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    with fitz.open(str(pdf_path)) as doc:
+        for index, page in enumerate(doc):
+            image_path = image_dir / f"page-{index + 1:03d}.png"
+            page.get_pixmap(matrix=fitz.Matrix(1.7, 1.7), alpha=False).save(str(image_path))
+            try:
+                data = backend.extract_with_prompt(str(image_path), prompt)
+            except Exception as exc:  # noqa: BLE001
+                combined.setdefault("vision_errors", []).append(f"Page {index + 1}: {exc}")
+                continue
+            combined["pages"].append(data)
+            combined["rows"].extend(data.get("rows") or [])
+            combined["inspections"].extend(data.get("inspections") or [])
+            for key in (
+                "form_date", "verified_by", "month", "chemical", "equipment_used", "corrective_action",
+                "blade_count", "idle_over_month", "repaired", "cleaned_before_use",
+            ):
+                value = data.get(key)
+                if value not in (None, "", [], {}):
+                    combined[key] = value
+    return combined
+
+
+def apply_pdf_annotations(
+    source_pdf: Path,
+    page_no: int,
+    annotations: List[Dict[str, Any]],
+    output_pdf: Path,
+) -> None:
+    import fitz
+
+    if page_no < 1:
+        raise ValueError("Page number must be 1 or greater.")
+    with fitz.open(str(source_pdf)) as document:
+        if page_no > document.page_count:
+            raise ValueError(f"PDF only has {document.page_count} pages.")
+        page = document[page_no - 1]
+        rect = page.rect
+        for annotation in annotations:
+            kind = str(annotation.get("type") or "text").lower()
+            value = str(annotation.get("value") or "").strip()
+            if kind == "checkmark":
+                value = value or "X"
+            if not value:
+                continue
+            x = max(0.0, min(1.0, float(annotation.get("x", 0)))) * rect.width
+            y = max(0.0, min(1.0, float(annotation.get("y", 0)))) * rect.height
+            size = max(8.0, min(34.0, float(annotation.get("size", 14))))
+            color = (0.72, 0.05, 0.16) if kind in {"checkmark", "signature", "initials"} else (0.05, 0.12, 0.25)
+            page.insert_text(
+                fitz.Point(x, y),
+                value,
+                fontsize=size,
+                fontname="helv",
+                color=color,
+                overlay=True,
+            )
+        output_pdf.parent.mkdir(parents=True, exist_ok=True)
+        document.save(str(output_pdf), garbage=4, deflate=True)
+
+
+def clear_generated_outputs(output_dir: Path, preserve: tuple[str, ...] = ("versions",)) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for child in list(output_dir.iterdir()):
+        if child.name in preserve:
+            continue
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink(missing_ok=True)
+
+
 def extract_region_text(pdf_path: Path, page_no: int, region: Dict[str, Any], output_dir: Path) -> str:
     if not shutil.which("tesseract"):
         return ""
@@ -1435,6 +1633,24 @@ def run_form_verification(form_job_id: str) -> None:
         pages = extract_form_pdf_text(pdf_path, output_dir / "ocr")
         combined = "\n".join(pages)
         checks: List[Dict[str, Any]] = []
+        observations = extract_structured_form_observations(pdf_path, output_dir, template)
+        related_codes = set(template.get("related_templates") or [])
+        related_jobs = [
+            item for item in load_form_jobs().values()
+            if item.get("id") != form_job_id
+            and item.get("status") == "complete"
+            and (not related_codes or item.get("template_code") in related_codes)
+            and (
+                (job.get("form_date") and item.get("form_date") == job.get("form_date"))
+                or (job.get("period") and item.get("period") == job.get("period"))
+            )
+        ]
+        checks.extend(validate_structured_form(
+            template.get("rule_family", ""),
+            observations,
+            template.get("rule_config") or {},
+            related_jobs,
+        ))
         for term in template.get("required_terms", []):
             found_pages = [index + 1 for index, text in enumerate(pages) if term.lower() in text.lower()]
             checks.append({
@@ -1524,6 +1740,7 @@ def run_form_verification(form_job_id: str) -> None:
             workflow_status="Manual Review Pending",
             completed_at=utc_now(),
             result=result,
+            observations=observations,
             message="Form verification complete",
         )
         add_notification(
@@ -2101,23 +2318,34 @@ async def create_food_safety_form(
     form_date: str = Form(""),
     department: str = Form(""),
 ) -> RedirectResponse:
-    if not pdf.filename or not pdf.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Upload a PDF form.")
+    if not pdf.filename or Path(pdf.filename).suffix.lower() not in {".pdf", ".png", ".jpg", ".jpeg"}:
+        raise HTTPException(status_code=400, detail="Upload a PDF, PNG, or JPEG form.")
     template = get_form_templates().get(template_code)
     if not template or template.get("category") != "Food Safety":
         raise HTTPException(status_code=400, detail="Select a Food Safety form template.")
     form_job_id = uuid4().hex[:12]
+    uploaded_ext = Path(pdf.filename).suffix.lower()
     input_path = FORM_UPLOAD_DIR / f"{form_job_id}_{slugify(pdf.filename)}.pdf"
+    raw_path = input_path if uploaded_ext == ".pdf" else FORM_UPLOAD_DIR / f"{form_job_id}_source{uploaded_ext}"
     output_dir = FORM_OUTPUT_DIR / form_job_id
     output_dir.mkdir(parents=True, exist_ok=True)
     size = 0
-    with input_path.open("wb") as handle:
+    with raw_path.open("wb") as handle:
         while chunk := await pdf.read(1024 * 1024):
             size += len(chunk)
             if size > MAX_UPLOAD_MB * 1024 * 1024:
-                input_path.unlink(missing_ok=True)
-                raise HTTPException(status_code=413, detail=f"PDF exceeds {MAX_UPLOAD_MB} MB.")
+                raw_path.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail=f"Form exceeds {MAX_UPLOAD_MB} MB.")
             handle.write(chunk)
+    if uploaded_ext != ".pdf":
+        from PIL import Image
+        try:
+            with Image.open(raw_path) as image:
+                image.convert("RGB").save(input_path, "PDF", resolution=150)
+        except Exception as exc:  # noqa: BLE001
+            raw_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=400, detail=f"Could not convert image to PDF: {exc}") from exc
+        raw_path.unlink(missing_ok=True)
     job = {
         "id": form_job_id,
         "name": name.strip() or slugify(pdf.filename),
@@ -2144,9 +2372,12 @@ async def create_food_safety_form(
 @app.get("/forms/{form_job_id}", response_class=HTMLResponse)
 async def food_safety_form_detail(request: Request, form_job_id: str) -> HTMLResponse:
     job = get_form_job(form_job_id)
+    import fitz
+    with fitz.open(job["input_path"]) as document:
+        page_count = document.page_count
     return templates.TemplateResponse(
         "form_job.html",
-        {"request": request, "app_name": APP_NAME, "job": job},
+        {"request": request, "app_name": APP_NAME, "job": job, "page_count": page_count},
     )
 
 
@@ -2194,6 +2425,70 @@ async def food_safety_form_file(form_job_id: str) -> FileResponse:
     return FileResponse(path, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{path.name}"'})
 
 
+@app.get("/forms/{form_job_id}/page/{page_no}.png")
+async def food_safety_form_page_image(form_job_id: str, page_no: int) -> FileResponse:
+    job = get_form_job(form_job_id)
+    if page_no < 1:
+        raise HTTPException(status_code=404, detail="Page not found")
+    image_path = render_pdf_page_to_png(
+        Path(job["input_path"]),
+        page_no - 1,
+        Path(job["output_dir"]) / "page_previews" / f"page-{page_no:03d}.png",
+    )
+    return FileResponse(image_path, media_type="image/png")
+
+
+@app.post("/forms/{form_job_id}/annotate-page")
+async def annotate_food_safety_form_page(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    form_job_id: str,
+    page_no: int = Form(...),
+    annotations: str = Form("[]"),
+) -> RedirectResponse:
+    job = get_form_job(form_job_id)
+    try:
+        items = json.loads(annotations)
+        if not isinstance(items, list) or not items:
+            raise ValueError
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Add at least one page correction.") from exc
+    source = Path(job["input_path"])
+    output_dir = Path(job["output_dir"])
+    versions_dir = output_dir / "versions"
+    versions_dir.mkdir(parents=True, exist_ok=True)
+    stamp = utc_now().replace(":", "-")
+    backup = versions_dir / f"{stamp}_before_edit_p{page_no:03d}.pdf"
+    revised = FORM_UPLOAD_DIR / f"{form_job_id}_{slugify(job['name'])}_revision-{stamp}.pdf"
+    shutil.copy2(source, backup)
+    try:
+        apply_pdf_annotations(source, page_no, items, revised)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Could not apply page correction: {exc}") from exc
+    history = list(job.get("history") or [])
+    history.append({
+        "at": utc_now(),
+        "user": actor_from_request(request),
+        "status": "Page corrected",
+        "comment": f"Added {len(items)} annotation(s) to page {page_no}.",
+        "page_no": page_no,
+        "backup_pdf": str(backup),
+        "revised_pdf": str(revised),
+    })
+    clear_generated_outputs(output_dir)
+    update_form_job(
+        form_job_id,
+        input_path=str(revised),
+        status="queued",
+        workflow_status="Awaiting Verification",
+        message=f"Page {page_no} corrected; queued for verification",
+        result=None,
+        history=history[-100:],
+    )
+    background_tasks.add_task(run_form_verification, form_job_id)
+    return RedirectResponse(url=f"/forms/{form_job_id}", status_code=303)
+
+
 @app.get("/templates", response_class=HTMLResponse)
 async def form_templates(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -2215,6 +2510,8 @@ async def save_template(
     frequency: str = Form("As needed"),
     tracking_enabled: str = Form("false"),
     related_templates: str = Form(""),
+    rule_family: str = Form(""),
+    rule_config: str = Form("{}"),
     regions: str = Form("[]"),
     sample_pdf: Optional[UploadFile] = File(None),
 ) -> RedirectResponse:
@@ -2239,6 +2536,8 @@ async def save_template(
         frequency=frequency,
         tracking_enabled=tracking_enabled == "true",
         related_templates_text=related_templates,
+        rule_family=rule_family,
+        rule_config_text=rule_config,
     )
     return RedirectResponse(url="/templates", status_code=303)
 
@@ -2687,7 +2986,7 @@ async def compare_page(job_id: str, event_id: str, side: str) -> FileResponse:
         page_index = page_no - 1
     else:
         pdf_path = Path(event.get("replacement_pdf", "")).resolve()
-        page_index = 0
+        page_index = int(event.get("after_page_index", 0) or 0)
     versions_dir = (out_dir / "versions").resolve()
     if versions_dir not in pdf_path.parents or not pdf_path.exists():
         raise HTTPException(status_code=404, detail="Comparison PDF not found")
@@ -2699,9 +2998,7 @@ async def compare_page(job_id: str, event_id: str, side: str) -> FileResponse:
 async def rerun_job(background_tasks: BackgroundTasks, job_id: str) -> RedirectResponse:
     job = get_job(job_id)
     out_dir = Path(job["output_dir"])
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
+    clear_generated_outputs(out_dir)
     update_job(
         job_id,
         status="queued",
@@ -2794,6 +3091,64 @@ async def replace_page(
         backup_pdf=str(backup_input),
         replacement_pdf=str(replacement_path),
         new_packet_pdf=str(new_input),
+        user=actor_from_request(request),
+    )
+    update_job(job_id, audit_trail=job.get("audit_trail"))
+    background_tasks.add_task(run_verification, job_id)
+    return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+
+
+@app.post("/jobs/{job_id}/annotate-page")
+async def annotate_packet_page(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    job_id: str,
+    page_no: int = Form(...),
+    annotations: str = Form("[]"),
+) -> RedirectResponse:
+    job = get_job(job_id)
+    try:
+        items = json.loads(annotations)
+        if not isinstance(items, list) or not items:
+            raise ValueError
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Add at least one page correction.") from exc
+    source = Path(job["input_path"])
+    output_dir = Path(job["output_dir"])
+    versions_dir = output_dir / "versions"
+    versions_dir.mkdir(parents=True, exist_ok=True)
+    stamp = utc_now().replace(":", "-")
+    backup = versions_dir / f"{stamp}_before_edit_p{page_no:03d}.pdf"
+    revised = UPLOAD_DIR / f"{job_id}_{slugify(job['packet_name'])}_revision-{stamp}.pdf"
+    shutil.copy2(source, backup)
+    try:
+        apply_pdf_annotations(source, page_no, items, revised)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Could not apply page correction: {exc}") from exc
+    revision_snapshot = versions_dir / f"{stamp}_after_edit_p{page_no:03d}.pdf"
+    shutil.copy2(revised, revision_snapshot)
+    clear_generated_outputs(output_dir)
+    job = update_job(
+        job_id,
+        input_path=str(revised),
+        status="queued",
+        message=f"Page {page_no} corrected; queued for verification",
+        progress_percent=1,
+        progress_stage="Queued after browser correction",
+        processed_pages=0,
+        total_pages=0,
+        summary=None,
+    )
+    audit_event(
+        job,
+        "page_replaced",
+        f"Page {page_no} edited in the browser and queued for verification",
+        page_no=page_no,
+        backup_pdf=str(backup),
+        replacement_pdf=str(revision_snapshot),
+        after_page_index=page_no - 1,
+        new_packet_pdf=str(revised),
+        annotations=items,
         user=actor_from_request(request),
     )
     update_job(job_id, audit_trail=job.get("audit_trail"))

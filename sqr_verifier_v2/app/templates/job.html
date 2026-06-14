@@ -272,12 +272,36 @@
       </div>
       <div class="viewer-actions">
         <a id="viewerPagePdf" class="download-action" href="#" target="_blank">Open / print page</a>
+        <a id="viewerPageEmail" class="download-action" href="#">Email page</a>
+        <button type="button" class="secondary small" id="viewerEditPage">Edit page</button>
         <button type="button" class="icon-button" data-close-viewer aria-label="Close page viewer">x</button>
       </div>
     </div>
     <div id="viewerPages" class="page-tabs"></div>
     <div class="page-viewer__body">
-      <img id="viewerImage" alt="Flagged packet page">
+      <div class="annotation-canvas" id="packetAnnotationCanvas">
+        <img id="viewerImage" alt="Flagged packet page">
+      </div>
+    </div>
+    <div id="packetAnnotationEditor" class="annotation-editor" hidden>
+      <div class="annotation-toolbar">
+        <select id="packetAnnotationType">
+          <option value="checkmark">Checkmark</option>
+          <option value="text">Text</option>
+          <option value="initials">Initials</option>
+          <option value="signature">Signature</option>
+          <option value="date">Date</option>
+        </select>
+        <input id="packetAnnotationValue" placeholder="Text, initials, signature, or date">
+        <input id="packetAnnotationSize" type="number" min="8" max="34" value="14" aria-label="Text size">
+        <button type="button" class="secondary small" id="clearPacketAnnotations">Clear marks</button>
+      </div>
+      <form action="/jobs/{{ job.id }}/annotate-page" method="post" class="annotation-save">
+        <input type="hidden" name="page_no" id="packetAnnotationPage">
+        <input type="hidden" name="annotations" id="packetAnnotations" value="[]">
+        <span id="packetAnnotationCount">0 corrections placed</span>
+        <button type="submit">Save corrected revision &amp; re-run</button>
+      </form>
     </div>
   </section>
 </div>
@@ -332,6 +356,15 @@ const viewerDetail = document.getElementById("viewerDetail");
 const viewerPages = document.getElementById("viewerPages");
 const viewerImage = document.getElementById("viewerImage");
 const viewerPagePdf = document.getElementById("viewerPagePdf");
+const viewerPageEmail = document.getElementById("viewerPageEmail");
+const viewerEditPage = document.getElementById("viewerEditPage");
+const packetAnnotationEditor = document.getElementById("packetAnnotationEditor");
+const packetAnnotationCanvas = document.getElementById("packetAnnotationCanvas");
+const packetAnnotationPage = document.getElementById("packetAnnotationPage");
+const packetAnnotationsInput = document.getElementById("packetAnnotations");
+const packetAnnotationCount = document.getElementById("packetAnnotationCount");
+let packetAnnotations = [];
+let selectedPacketPage = null;
 const bookmarkToggle = document.getElementById("bookmarkToggle");
 const bookmarkDirectory = document.getElementById("bookmarkDirectory");
 if (bookmarkToggle && bookmarkDirectory) {
@@ -350,9 +383,16 @@ function showFlagPage(flagName, flagDetail, pages) {
   viewerPages.innerHTML = "";
 
   function selectPage(pageNo, button) {
+    selectedPacketPage = pageNo;
+    packetAnnotationPage.value = pageNo;
+    packetAnnotations = [];
+    renderPacketAnnotations();
+    packetAnnotationEditor.hidden = true;
     viewerImage.src = `/jobs/${activeJobId}/page/${pageNo}.png`;
     viewerImage.alt = `Packet page ${pageNo} for ${flagName}`;
     viewerPagePdf.href = `/jobs/${activeJobId}/page/${pageNo}.pdf`;
+    const pageUrl = `${window.location.origin}/jobs/${activeJobId}/page/${pageNo}.pdf`;
+    viewerPageEmail.href = `mailto:?subject=${encodeURIComponent(`Packet page ${pageNo}: {{ job.packet_name }}`)}&body=${encodeURIComponent(`Review or download this page: ${pageUrl}`)}`;
     viewerPages.querySelectorAll("button").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
   }
@@ -366,6 +406,44 @@ function showFlagPage(flagName, flagDetail, pages) {
     if (index === 0) selectPage(pageNo, button);
   });
 }
+
+function renderPacketAnnotations() {
+  packetAnnotationCanvas.querySelectorAll(".annotation-mark").forEach((node) => node.remove());
+  packetAnnotations.forEach((item) => {
+    const mark = document.createElement("span");
+    mark.className = "annotation-mark";
+    mark.style.left = `${item.x * 100}%`;
+    mark.style.top = `${item.y * 100}%`;
+    mark.style.fontSize = `${item.size}px`;
+    mark.textContent = item.value || "X";
+    packetAnnotationCanvas.appendChild(mark);
+  });
+  packetAnnotationsInput.value = JSON.stringify(packetAnnotations);
+  packetAnnotationCount.textContent = `${packetAnnotations.length} correction${packetAnnotations.length === 1 ? "" : "s"} placed`;
+}
+
+viewerEditPage.addEventListener("click", () => {
+  if (!selectedPacketPage) return;
+  packetAnnotationEditor.hidden = !packetAnnotationEditor.hidden;
+});
+packetAnnotationCanvas.addEventListener("click", (event) => {
+  if (packetAnnotationEditor.hidden || event.target !== viewerImage) return;
+  const rect = viewerImage.getBoundingClientRect();
+  const type = document.getElementById("packetAnnotationType").value;
+  let value = document.getElementById("packetAnnotationValue").value.trim();
+  if (type === "checkmark") value = "X";
+  if (type === "date" && !value) value = new Date().toLocaleDateString();
+  if (!value) return;
+  packetAnnotations.push({
+    type,
+    value,
+    size: Number(document.getElementById("packetAnnotationSize").value || 14),
+    x: (event.clientX - rect.left) / rect.width,
+    y: (event.clientY - rect.top) / rect.height
+  });
+  renderPacketAnnotations();
+});
+document.getElementById("clearPacketAnnotations").addEventListener("click", () => { packetAnnotations = []; renderPacketAnnotations(); });
 
 document.querySelectorAll("[data-page-open]").forEach((button) => {
   button.addEventListener("click", () => {

@@ -276,6 +276,12 @@ class OpenAIVisionBackend:
         }
 
     def extract(self, image_path: str) -> Dict[str, Any]:
+        return self.extract_with_prompt(
+            image_path,
+            VISION_PROMPT + "\n\nReturn only valid JSON. Do not use markdown.",
+        )
+
+    def extract_with_prompt(self, image_path: str, prompt: str) -> Dict[str, Any]:
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY not set.")
         with open(image_path, "rb") as f:
@@ -288,7 +294,7 @@ class OpenAIVisionBackend:
                     "content": [
                         {
                             "type": "input_text",
-                            "text": VISION_PROMPT + "\n\nReturn only valid JSON. Do not use markdown.",
+                            "text": prompt,
                         },
                         {"type": "input_image", "image_url": image_url},
                     ],

@@ -45,6 +45,20 @@
       <label>Related form codes
         <textarea id="templateRelated" name="related_templates" placeholder="SANITATION, AIR_COMPRESSOR"></textarea>
       </label>
+      <label>Verification rule family
+        <select id="templateRuleFamily" name="rule_family">
+          <option value="">Basic template checks</option>
+          <option value="equipment_washdown">Equipment washdown / sanitation</option>
+          <option value="preop">Startup / pre-op</option>
+          <option value="lubrication">Lubrication</option>
+          <option value="dicer_blades">Dicer blades</option>
+          <option value="calibration">Calibration</option>
+          <option value="backpack_sanitizer">Backpack sanitizer</option>
+        </select>
+      </label>
+      <label>Rule configuration (JSON)
+        <textarea id="templateRuleConfig" name="rule_config" placeholder='{"required_inspections": 4}'>{}</textarea>
+      </label>
       <label>Completed sample PDF
         <input name="sample_pdf" type="file" accept="application/pdf">
       </label>
@@ -73,6 +87,7 @@
         <small>Required text: {{ item.required_terms|join(", ") or "None" }}</small>
         <small>{{ item.required_signatures }} signature label(s) &middot; {{ item.regions|length }} visual region(s)</small>
         <small>{{ item.frequency }} &middot; {{ "Missing-form tracking on" if item.tracking_enabled else "Tracking off" }}</small>
+        {% if item.rule_family %}<small>Rule engine: {{ item.rule_family }}</small>{% endif %}
         <button
           type="button"
           class="secondary small template-edit"
@@ -97,7 +112,9 @@ const fields = {
   regions: document.getElementById("templateRegions"),
   frequency: document.getElementById("templateFrequency"),
   tracking: document.getElementById("templateTracking"),
-  related: document.getElementById("templateRelated")
+  related: document.getElementById("templateRelated"),
+  ruleFamily: document.getElementById("templateRuleFamily"),
+  ruleConfig: document.getElementById("templateRuleConfig")
 };
 const builder = document.getElementById("regionBuilder");
 const canvas = document.getElementById("regionCanvas");
@@ -138,6 +155,8 @@ document.querySelectorAll(".template-edit").forEach((button) => {
     fields.frequency.value = item.frequency || "As needed";
     fields.tracking.value = item.tracking_enabled ? "true" : "false";
     fields.related.value = (item.related_templates || []).join(", ");
+    fields.ruleFamily.value = item.rule_family || "";
+    fields.ruleConfig.value = JSON.stringify(item.rule_config || {}, null, 2);
     regions = item.regions || [];
     if (item.sample_filename) {
       builder.hidden = false;

@@ -2,16 +2,16 @@
 {% block content %}
 <section class="detail">
   <p class="eyebrow">Daily and monthly compliance</p>
-  <h1>Food Safety Forms</h1>
-  <p>Upload scanned forms, verify template requirements, correct problems, approve, and file.</p>
+  <h1>Daily &amp; Monthly Forms</h1>
+  <p>Verify equipment, sanitation, startup, lubrication, blade, calibration, and sanitizer records.</p>
 </section>
 
 <section class="grid">
   <article class="panel">
-    <h2>Upload scanned forms</h2>
+    <h2>Upload compliance forms</h2>
     {% if templates %}
     <form action="/forms" method="post" enctype="multipart/form-data" class="mobile-form">
-      <label>Scanned PDF <input type="file" name="pdf" accept="application/pdf" required></label>
+      <label>Scanned form <input type="file" name="pdf" accept="application/pdf,image/png,image/jpeg" required></label>
       <label>Form type
         <select name="template_code" required>
           {% for item in templates %}

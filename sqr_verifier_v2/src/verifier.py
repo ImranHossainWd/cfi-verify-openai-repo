@@ -455,6 +455,13 @@ def is_source_or_support_page(page: "PageRecord") -> bool:
     ))
 
 
+def is_bin_pull_cover_page(page: "PageRecord") -> bool:
+    if page.form_code != "SQR_FULL":
+        return False
+    text = " ".join(str(v) for v in [page.form_label, page.fields, page.notes]).lower()
+    return any(token in text for token in ("cover sheet", "cold storage", "bin pull", "pull ticket", "source bin"))
+
+
 def looks_like_package_count(page: "PageRecord") -> bool:
     text = " ".join(str(v) for v in [page.fields, page.notes]).lower()
     return any(token in text for token in ("pallet", "pallets", " plt", "plts", "piece", "pieces", "label", "stamp"))
@@ -3222,6 +3229,21 @@ def verify_pdf(pdf_path: str, out_dir: str,
             report.packet_level_checks.append(CheckResult(
                 f"Order-level form: {fname}", "fail",
                 "Not detected anywhere in packet", []))
+
+    bin_pull_covers = [page for page in pages if is_bin_pull_cover_page(page)]
+    if bin_pull_covers:
+        support_pages = [page for page in pages if page.form_code in {"BIN_TAG", "PULL"}]
+        report.packet_level_checks.append(CheckResult(
+            "Sorting Quality Report bin-pull workflow",
+            "pass" if support_pages else "fail",
+            (
+                f"Cover sheet is supported by bin/pull documentation on pages "
+                f"{[page.page_no for page in support_pages]}."
+                if support_pages
+                else "Sorting Quality Report cover sheet detected, but no Bin Tag or Pull Ticket was found."
+            ),
+            [page.page_no for page in bin_pull_covers] + [page.page_no for page in support_pages],
+        ))
 
     # Trader Joe's / BOL / Trailer-Cargo at packet level
     cprof = report.customer_profile

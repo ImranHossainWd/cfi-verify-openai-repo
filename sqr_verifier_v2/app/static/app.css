@@ -539,6 +539,53 @@ button.small,
   align-items: center;
   gap: 8px;
 }
+
+.annotation-editor {
+  padding: 14px 20px 18px;
+  border-top: 1px solid #dce3ec;
+  background: #f8fafc;
+}
+.annotation-toolbar,
+.annotation-save {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.annotation-toolbar select,
+.annotation-toolbar input {
+  width: auto;
+  min-width: 130px;
+}
+.annotation-toolbar input[type="number"] {
+  min-width: 78px;
+  width: 78px;
+}
+.annotation-save {
+  justify-content: space-between;
+  margin-top: 12px;
+}
+.annotation-canvas {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+.annotation-canvas img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.annotation-mark {
+  position: absolute;
+  z-index: 3;
+  color: #b51f39;
+  font-weight: 850;
+  line-height: 1;
+  transform: translate(-10%, -80%);
+  pointer-events: none;
+  text-shadow: 0 1px 0 #fff;
+}
 .file-viewer__panel {
   width: min(1180px, 100%);
 }

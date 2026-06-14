@@ -29,6 +29,15 @@
       </article>
       {% endfor %}
     </div>
+    <h3>Form pages</h3>
+    <div class="page-directory">
+      {% for page_no in range(1, page_count + 1) %}
+      <button type="button" class="page-directory__item form-page-open" data-page="{{ page_no }}">
+        <strong>Page {{ page_no }}</strong>
+        <span>View or correct page</span>
+      </button>
+      {% endfor %}
+    </div>
     {% else %}
     <p class="empty">The form is {{ job.status }}.</p>
     {% endif %}
@@ -57,4 +66,96 @@
     {% endif %}
   </aside>
 </section>
+
+<div id="formPageViewer" class="page-viewer" hidden>
+  <div class="page-viewer__backdrop" data-close-form-viewer></div>
+  <section class="page-viewer__panel" role="dialog" aria-modal="true" aria-labelledby="formViewerTitle">
+    <div class="page-viewer__head">
+      <div>
+        <p class="eyebrow">Form correction</p>
+        <h2 id="formViewerTitle">Edit scanned page</h2>
+        <p>Choose a mark, then click the exact location on the page.</p>
+      </div>
+      <button type="button" class="icon-button" data-close-form-viewer aria-label="Close">x</button>
+    </div>
+    <div class="annotation-toolbar">
+      <select id="formAnnotationType">
+        <option value="checkmark">Checkmark</option>
+        <option value="text">Text</option>
+        <option value="initials">Initials</option>
+        <option value="signature">Signature</option>
+        <option value="date">Date</option>
+      </select>
+      <input id="formAnnotationValue" placeholder="Text, initials, signature, or date">
+      <input id="formAnnotationSize" type="number" min="8" max="34" value="14" aria-label="Text size">
+      <button type="button" class="secondary small" id="clearFormAnnotations">Clear marks</button>
+    </div>
+    <div class="annotation-canvas" id="formAnnotationCanvas">
+      <img id="formViewerImage" alt="Scanned form page">
+    </div>
+    <form action="/forms/{{ job.id }}/annotate-page" method="post" id="formAnnotationForm" class="annotation-save">
+      <input type="hidden" name="page_no" id="formAnnotationPage">
+      <input type="hidden" name="annotations" id="formAnnotations" value="[]">
+      <span id="formAnnotationCount">0 corrections placed</span>
+      <button type="submit">Save corrected revision &amp; re-run</button>
+    </form>
+  </section>
+</div>
+
+<script>
+const formViewer = document.getElementById("formPageViewer");
+const formCanvas = document.getElementById("formAnnotationCanvas");
+const formImage = document.getElementById("formViewerImage");
+const formPageInput = document.getElementById("formAnnotationPage");
+const formAnnotationsInput = document.getElementById("formAnnotations");
+const formAnnotationCount = document.getElementById("formAnnotationCount");
+let formAnnotations = [];
+
+function renderFormAnnotations() {
+  formCanvas.querySelectorAll(".annotation-mark").forEach((node) => node.remove());
+  formAnnotations.forEach((item) => {
+    const mark = document.createElement("span");
+    mark.className = "annotation-mark";
+    mark.style.left = `${item.x * 100}%`;
+    mark.style.top = `${item.y * 100}%`;
+    mark.style.fontSize = `${item.size}px`;
+    mark.textContent = item.value || "X";
+    formCanvas.appendChild(mark);
+  });
+  formAnnotationsInput.value = JSON.stringify(formAnnotations);
+  formAnnotationCount.textContent = `${formAnnotations.length} correction${formAnnotations.length === 1 ? "" : "s"} placed`;
+}
+
+document.querySelectorAll(".form-page-open").forEach((button) => {
+  button.addEventListener("click", () => {
+    const pageNo = Number(button.dataset.page);
+    formAnnotations = [];
+    formPageInput.value = pageNo;
+    formImage.src = `/forms/{{ job.id }}/page/${pageNo}.png?v=${Date.now()}`;
+    document.getElementById("formViewerTitle").textContent = `Edit page ${pageNo}`;
+    renderFormAnnotations();
+    formViewer.hidden = false;
+  });
+});
+
+formCanvas.addEventListener("click", (event) => {
+  if (event.target !== formImage) return;
+  const rect = formImage.getBoundingClientRect();
+  const type = document.getElementById("formAnnotationType").value;
+  let value = document.getElementById("formAnnotationValue").value.trim();
+  if (type === "checkmark") value = "X";
+  if (type === "date" && !value) value = new Date().toLocaleDateString();
+  if (!value) return;
+  formAnnotations.push({
+    type,
+    value,
+    size: Number(document.getElementById("formAnnotationSize").value || 14),
+    x: (event.clientX - rect.left) / rect.width,
+    y: (event.clientY - rect.top) / rect.height
+  });
+  renderFormAnnotations();
+});
+document.getElementById("clearFormAnnotations").addEventListener("click", () => { formAnnotations = []; renderFormAnnotations(); });
+document.querySelectorAll("[data-close-form-viewer]").forEach((node) => node.addEventListener("click", () => { formViewer.hidden = true; }));
+</script>
 {% endblock %}

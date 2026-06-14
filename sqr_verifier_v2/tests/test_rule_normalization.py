@@ -16,6 +16,7 @@ from verifier import (
     classify_page,
     customer_equivalent,
     is_processor_header_customer,
+    is_bin_pull_cover_page,
     is_source_or_support_page,
     kg_to_lb,
     looks_like_package_count,
@@ -90,6 +91,13 @@ class RuleNormalizationTests(unittest.TestCase):
     def test_processor_header_not_customer(self):
         self.assertTrue(is_processor_header_customer("California Fruit Inc."))
         self.assertTrue(is_processor_header_customer("California Fruit Basket"))
+
+    def test_sorting_quality_cover_detects_bin_pull_workflow(self):
+        page = PageRecord(
+            1, "", "SQR / Lab Findings", "SQR_FULL",
+            {"all_fields": {"document_purpose": "Cold storage bin pull cover sheet"}},
+        )
+        self.assertTrue(is_bin_pull_cover_page(page))
 
     def test_package_counts_are_not_case_counts(self):
         pallet_page = PageRecord(1, "", "BOL", "BOL", {"cases": 1, "all_fields": {"pieces": "1 pallet"}})
